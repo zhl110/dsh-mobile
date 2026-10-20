@@ -11,6 +11,13 @@
 *.xml       text eol=lf
 *.json      text eol=lf
 *.txt       text eol=lf
+# 无扩展名这一份更要钉：它是 /root/.dsh-env 的真源模板，服务起来时 bash 会 source 它，
+# 里面那行 export 一旦带上 CR，值里就多一个不可见字符 —— 症状是"key 明明对却 401"，最难查的那种。
+config/dsh-env  text eol=lf
+# 两份文档与那个 PowerShell 件也钉 LF。理由不是"要推去机上"，而是**我这一路的读数全按字节报**
+# （RUNBOOK 现在 181,002 B 这种），检出时被 autocrlf 换成 CRLF 就多几千个 \r，下次对不上数还得先解释自己。
+*.md        text eol=lf
+*.ps1       text eol=lf
 # 二进制：别让 git 去"规范化"它们，APK 与图标一旦被动过一个字节，sha 就对不上装机那一发了。
 *.png       binary
 *.apk       binary

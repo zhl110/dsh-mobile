@@ -25,7 +25,7 @@
    这也是他那句"为什么他们装的 APK 功能和网页一样"的答案。16 MB 那个真·非网页的原生客户端
    按他的决定**留在桌面当对照**，两条并排，随时可比。
 
-## 当前状态（2026-10-19，客户端那一层更新到 2026-10-20 晚）
+## 当前状态（2026-10-19，客户端那一层更新到 2026-10-20 晚，网络这一层查到底到 2026-10-21 凌晨）
 
 1 ✅ `aarch64` / Ubuntu 24.04.5 / node v22.20.0 / npm 10.9.3 / dsh 0.2.1-rc.2
 2 ✅ koffi require OK（预编译，盘上 cmake/gcc/g++/make/git/python3 全未装）、ripgrep 15.0.0
@@ -626,6 +626,77 @@ cookie 与首选项都还在），成品 `app/out/dsh-app.apk` **86,632 B**、sh
 **这轮没做过**：点 App 上那行「手机存储」（要他人工闭环）、触发模型下载、单独验 `MODIFY_AUDIO_SETTINGS` 缺了会怎样、
 量竖屏下的布局、动 KernelSU/susfs、绕锁、git commit。
 
+**2026-10-21 凌晨那一格（状态 24，他一句"提交，然后下模型"→ 241 MB 进来、插件自己认了、并且真出字）**
+先提交：`2c4b0fa2` 是本项目的**首次入库**（87 份）。**差点出事**：`git add` 不带 pathspec 时，工作区里他那批与本项目无关的
+`D ../aihot-promo/…`、`D ../apple-site-tour/…` 删除会被一起暂存走 —— 现在 `add` 与 `commit` **都带 `-- dsh-mobile`**，
+并补了 `.gitignore`（`downloads/`、`reference/gh-3p/` 这类只读参照件不入库）与 `.gitattributes`（`.sh` 强制 LF，防止我推上去的探针被 Windows 换成 CRLF）。
+
+再取模型（读数全在 RUNBOOK **14.21**）：电脑侧按包里 `runtime/assets.json` 那几个固定 URL 从 hf-mirror 取三份 ——
+`model.int8.onnx` **239,233,841 B**、`tokens.txt` **315,894 B**、`silero_vad.onnx` **1,807,522 B**，合计 **241,357,257 B**，
+逐个本地算 sha256 与清单对上再 `adb push`。**目录形状是猜错一次才知道的**：清单里 VAD 的落点是
+`models/silero/`，与 `models/sensevoice-onnx/` 是**兄弟**、不是它的子目录（`lib/index.js:216` 那句 `join(dataRoot,"models","silero",name)`），
+第一版按 `sensevoice-onnx/silero/` 推过去插件不认。**又改口一次**：push 脚本第一版报"零失败"是假的 ——
+`adb` 在 `while read` 循环里把循环的 stdin 吃了，实际只推了一份；判据改成**三个计数必须相等**（清单 3 ⇒ 推 3 ⇒ 机上校验通过 3，`push2.log` 读数 `3/3`），
+`push.log` 那份错日志留着不删，它是这条错长什么样的证据。
+
+插件那一侧的闭环**不是我算的**：`speech/prepare`（args 从 `speech/catalog` 的 `selection.providerId` = `sensevoice-local` 拿）
+之后轮询，`[05s] checking` ⇒ **`[10s] ready`、五步全 complete、全程零下载字节**。原因是代码里 `download()` 第一行
+`if (await matchesAsset(...)) return;`（:338），而 `matchesAsset()` 判 size + 整文件 sha256 ⇒ **撞上清单连 DNS 都不查**。
+顺带把那份"过期快照"摘掉：第一次读 catalog 拿到的还是 `failed` + 他那次点下载失败的旧消息，那不是新判断，
+是进程内对象（`/root/.dsh` 下语音这块没有任何状态文件）。内存增量实测：引擎 234 → 247 MB，识别 worker 单进程 RSS **440 MB**
+（插件自己给 UI 的预估是 1 GB，那是预估不是读数），机器 `MemAvailable` 9,420 MB 量级 ⇒ 富余。
+
+**最硬的一发**：Windows 自带 SAPI 合成「今天天气怎么样，我想出门散步。」→ ffmpeg 转 16k/单声道/PCM16 → base64 喂 `speech/transcribe`，
+机上回 `text:"今天天气怎么样？我想出门散步。"`、`audioSeconds:4.2379375`、`inferenceSeconds:0.1039142189999984`
+⇒ **4.24 秒音频在手机上推理 0.10 秒**。中间被拒两次，**两次都是我的错**：线上键名是 `audioBase64`（我照 core 内部那个 `request.audio` 猜的），
+以及 ffmpeg 默认在头里塞了一块 LIST INFO 元数据（`worker.js:110` 硬按第 44 字节起读 PCM，偏移 36 那四个字节必须是 `data`），
+要 `-map_metadata -1 -fflags +bitexact -flags:a +bitexact`。逗号出来成问号不算识别错：模型开着 `useInverseTextNormalization: 1`，断句是它自己判的。
+**但测试件是合成音，只证明链路通，不证明真人准确率** —— 那半条得他自己录。
+
+出网：**电脑 241,357,257 B（本项目第一次真下载东西），手机零出网**。设备上只写了那三份模型（644 root:root，`du -sb` 与逐份相加一致）
+加 `/tmp` 里两个测试件（跑完自删、复点 No such file）；`/root` 里本轮新推的探针副本逐个 `head -2` 确认是我这轮编号才删，
+删后复点 `.sh` = **7**（那 7 份是往轮部署的正式工具，一份没动）。新增三份常驻工具：`tools/run-probe.sh`（送探针自带收尾：强制 `MSYS2_ARG_CONV_EXCL`、
+统一去 CRLF、跑完删两份副本并当场数残留）、`tools/fetch-sensevoice.sh`、`tools/push-sensevoice.sh`，另加 `tools/make-voice-wav.ps1`（UTF-8 带 BOM，PowerShell 5.1 才不吞中文）。
+文档：RUNBOOK 加 14.21 整节（1,746 → 1,862 行），本文件加状态 24 与这段、下一步第 14 条结掉。
+**这轮没做**：App 里那两步（插件关再开、真人录一句）、`inspect()` 重启后是否真进 `standby`（只到读代码得推断）、fp32 那档 937,617,178 B、
+真人声准确率、`MODIFY_AUDIO_SETTINGS` 缺失会怎样、竖屏窄栏布局；没动 KernelSU/susfs、没绕锁、没 reboot、没 npm install。
+
+**2026-10-21 凌晨再收一格（状态 25，他那句"以后难道全得通过电脑下载吗"→ 量出病在解析，并在手机上把解析补好了）**
+四层分开测（读数 `downloads/p26.txt`–`p33-sync.txt`，全节在 RUNBOOK **14.22**）：配置层 = resolv.conf 三条 nameserver + `timeout:2 attempts:2`、
+无 proxy 变量、**IPv6 默认路由 0 条**；解析层 = **UDP 53 这台机基本废**，没钉过的域名六条全在 `10,011–10,015 ms` 给空且退出码仍是 0，
+被墙那类倒给得出**假答案**（`huggingface.co` ⇒ `104.244.46.9` 与带 `face:b00c` 的 v6，DoH 回 `157.240.8.36`）；
+建连层 = 拿真 IP 直连 443，境内 `301/302/200` 全有响应，境外两种 `000` 形状不同（npmjs 8 秒窗到顶 vs raw **0.118 秒**就失败）；
+真字节层 = apt 侧 tuna 的 noble Release **Range `206` 落 1,024 B**、npm 侧跟 302 到 cdn 落 **2,774 B 且 tar 解出 3 个成员**。
+⇒ **病在解析不在出口**，所以答案不是"以后全得靠电脑"。
+
+手机侧唯一干净的解析路是**阿里的 DoH**（`https://223.5.5.5/resolve`；`1.1.1.1` / `8.8.8.8` 那两条 6 秒全空），
+这条路是拿错的参数撞出来的 —— `p26` 我打 Cloudflare 式 `/dns-query`，回 `no 'dns' query parameter found`，
+**那句失败恰好证明 TLS 通了、对端回话了**。做成了常驻工具 `tools/doh-hosts.sh`（6,293 B，`--check` / `--sync` / `--revert`；
+清单分"实测连得上的才钉"与"钉了也连不通的只报不写"两摞；写之前逐字节备份并比 sha256 才动笔；
+钉完那一步的验收**故意不带 `--resolve`**，不然自欺）。跑一遍的读数（`p33-sync.txt`）：备份
+`/root/.dsh/hosts.bak.20261020-161513`（sha `cbdb3af9…`）、**新增 5 / 本来就在 9 / 问不到 0**、
+不带 `--resolve` 复测 hf-mirror `200` / gitee `200` / aliyun `301` / www.modelscope `302`；hosts 从 22 行非注释变 27（机上复点 26 条数字开头 + 1 条 `::1`）。
+
+分来源裁决：**apt 能**（源本就配 tuna ubuntu-ports）、**npm 能**（钉 npmmirror 后包体落盘解得开）、
+**GitHub 能但慢**（`github.com` `676,496 B/30s`、`codeload` `790,533 B/30s` ⇒ 约 22–26 KB/s；chroot **没有 `git`**，装要走 apt = 等他点头）、
+**HF 那类模型仍不行、且原因不在解析**（hf-mirror 解析与连接都通，但它 302 落点 `cas-bridge.xethub.hf.co` 在手机上
+`302 / size=0 / 10.57s`；ModelScope 三个猜测仓库名全 `404` = **我没验到**，不是"国内没有"）。
+
+改口四处，都写在原地：① `p27` 丁那句"npm 拿不到包"读的是**没跟转的 302 正文 80 B**；② `p26` §3 那发 `github.com 000`
+是**窗口设了 6 秒**，30 秒窗同一 IP 拿到 676,496 B；③ `p31` 末尾"出网合计 0 B"是 `tot` 计数器在子 shell 里丢的假读数，
+逐行相加是 **1,726,377 B**；④ 我自己工具里那行"（DoH 给了 N 条候选）"**每条少报 1**（`printf '%s'` 不带换行而 `wc -l` 数换行），
+已改 `echo` 并推回机上（本地/机上 md5 同 `568c093f…`），**但那一行没能复现**（14 条全在清单里，`--sync` 不再进那行）⇒ 这半条只到读代码。
+另有一条观察值得留着：`cdn.npmmirror.com` 钉的 `223.109.3.139` 已不在 DoH 当时给的 16 条里，可那次跟着 302 仍 `200 / 2,774 B`
+⇒ **"不在当前答案集合"只说明钉旧了，不说明连不通**；判据要按在不在集合里，不能按是不是第一条。
+
+出网：手机侧 1,726,377 B（全是我故意压带宽的三发）+ KB 级取样；**电脑侧这轮零下载**。
+设备写入只有 `/etc/hosts`（追加 5 行，有逐字节备份与 `--revert`）与 `/root/doh-hosts.sh`（6,293 B）两处，
+chroot `/root` 的 `.sh` 从 7 份变 8 份（新增这份是正式工具，与那 7 份同性质）；探针副本跑完即删。
+文档：RUNBOOK 加 14.22 整节，本文件加状态 25 与这段、下一步新增第 16、17 条（要不要在机上装 `git`、要不要把 `--check` 挂周期），
+并给第 6 条那个"连不上就先跑电脑上的 pin-hosts"补了一个不依赖电脑的前置。
+**这轮没做**：`apt install git`、手机上真 clone 一个仓、把 `--check` 做成周期跑（IP 会漂，钉过的条会悄悄地坏）、
+替他点 App 那两步、动 KernelSU/susfs、绕锁、reboot。
+
 
 ## 下一步
 
@@ -646,7 +717,10 @@ cookie 与首选项都还在），成品 `app/out/dsh-app.apk` **86,632 B**、sh
    **仍然是 `.off`、仍然没开**）。愿意的话重启一次手机验三件：① 自启自己在不在；② 重启后**不用碰任何输入**
    图标点开还能进（这条现在由入口兜，理论上成立、真重启没验过）；③ 那次"服务死掉"到底会不会复现。
 6. 哪天 apt/npm/模型/登录突然连不上，先 `python tools/pin-hosts.py`（IP 会漂，实测一分钟内换过两次；
-   域名表现在含 `platform.deepseek.com`）。**升级 dsh 之后要重做 polyfill**（第 10.11 与 13.4 节），
+   域名表现在含 `platform.deepseek.com`）。
+   → **状态 25 之后这条多了一个不依赖电脑的前置**：手机上直接 `bash /root/doh-hosts.sh --check`（只读对账）再 `--sync`（补钉、带逐字节备份与 `--revert`）。
+   那条 `pin-hosts.py` 是"电脑算好 IP 再推过去"，现在这台机自己能拿阿里的 DoH 问答案，**先跑手机这一发，不灵再回到电脑那一条**（RUNBOOK 14.22）。
+   **升级 dsh 之后要重做 polyfill**（第 10.11 与 13.4 节），
    否则症状还是"工作区永远在加载"。
 7. **等他一句话的三件**（我都不自己动）：
    ① 那个会话要不要从 `danger-full-access` 拨回 `Workspace Write`（拨回去 = Bash 又全灭，见状态 10）；
@@ -759,17 +833,30 @@ cookie 与首选项都还在），成品 `app/out/dsh-app.apk` **86,632 B**、sh
     的会话"读数，且他中途换过会话就会跳错；比起这个，"停在插件页时按返回就是问退不退出"这个行为他其实
     一天碰不到几次。他说要做我再做，并把他选的那条路写进 RUNBOOK。
 
-14. **等他点头的一件有字节的事：语音那条要不要我在他电脑上把那 241 MB 取回来**（状态 23 起）。
-    查清了：手机侧麦克风链 0.6 已通、模型这一侧在这台手机上**下不动**（两个默认源一发都连不上，读数在 RUNBOOK 14.20 ④(d)），
-    但他电脑上 `hf-mirror.com` 那发 HEAD 是 **200** ⇒ 可行路径是「电脑按 `runtime/assets.json` 里那几个固定 URL 下三个文件
-    → 本地算 sha256 与包里那条对上 → `adb push` 进 `/root/.dsh/speech-to-text/sensevoice/models/sensevoice-onnx/`」，
-    手机全程零出网、也不用改插件配置（插件自己就按 bytes+SHA-256 双校验，README.zh 明说"缓存完整且校验通过后立即恢复就绪"）。
-    **要点头的理由只有一个：239,233,841 B 这个量。** 他不发话我就一行字节都不取。
-    另一条更省流量的路也存在（把 `modelOrigins` 换成一个可达的源，让手机自己下），但那还是要走他手机 241 MB 流量，我不荐。
+14. ~~**等他点头的一件有字节的事：语音那条要不要我在他电脑上把那 241 MB 取回来**~~ **已做完**（他一句"提交，然后下模型"，
+    状态 23 起 → 2026-10-21 凌晨结掉，读数在 RUNBOOK 14.21 与 14.22）：电脑侧从 hf-mirror 取三份共 **241,357,257 B**、
+    逐个 sha256 与包里 `assets.json` 对上、`adb push` 进 `/root/.dsh/speech-to-text/sensevoice/models/`
+    （注意是**两个兄弟目录**：`sensevoice-onnx/` 放模型与 tokens、`silero/` 放 VAD，我一开始按 `sensevoice-onnx/silero/` 推过、插件不认）；
+    插件那侧 `speech/prepare` **10 秒落 `ready`、零下载字节**（`matchesAsset()` 撞上清单就跳过 `download()`，连 DNS 都不查），
+    再拿一句 SAPI 合成的中文实测出字 `text:"今天天气怎么样？我想出门散步。"`（4.24 秒音频、识别 0.10 秒）。
+    还剩他那一步：App 里把语音插件关掉再打开，真人录一句（合成音只证明链路通，不证明真人准确率）。
 
 15. **要他亲手做的一步闭环（零成本）：打开 App → 添加工作区 → 选择工作区目录，看第一屏有没有多出「手机存储」那一行，点进去**。
     引擎那一发返回里这条已经在了（`hidden:false`，顺着进去 `Download` 也列得出来），但**"界面上这一行点得动"我不能替他验**。
     如果他那一屏还是空的，那前端就不是直接渲染 `entries` 这一发，我按他的屏再对一次（那条备用路不依赖这一步：同一屏点面包屑里的 `/` 再点 `phone`）。
+
+16. **等他点头的一件装东西的事：要不要在手机的 chroot 里 `apt install git`**（状态 25 起）。
+    背景是他那句"以后难道全得通过电脑下载吗"。量完了：**病在解析不在出口**，解析这层已经在手机上用 `tools/doh-hosts.sh --sync` 自己补好
+    （新增 5 条、备份 + sha256 + `--revert` 都在，读数 RUNBOOK 14.22），所以 **apt / npm / GitHub 这三类以后手机上自己能走**，
+    只有 **HF 那一类模型**还断着（hf-mirror 的 302 落点 `cas-bridge.xethub.hf.co` 在手机上 0 字节；ModelScope 我猜的三个仓库名全 404，**是没验到、不是没有**）。
+    GitHub 这一类唯一的缺口是 chroot 里**没有 `git`**（`p30` ③那一发，与验收第 2 条那句"盘上 git 全未装"是两份独立读数、同一形状）：
+    直连速度实测约 **22–26 KB/s**（`codeload` 30 秒传回 790,533 B），
+    不下 git 也能拿 tarball，装了 git 才能 clone 与后续 `pull`。**装 = 用 apt 往他机上落包**（源本就配在 tuna，Range 已实测落真字节），
+    所以我一行都不动，等他一句话。我的荐法：**装**，代价是一个 git 包体（几十 MB 级、按实测速度十几分钟量级，这数我没实测过，是推的）。
+
+17. **一件周期性的事，现在没人做：`bash /root/doh-hosts.sh --check`**。钉进 hosts 的 IP **会漂**（`cdn.npmmirror.com` 那条
+    `223.109.3.139` 这轮已经不在 DoH 给的 16 条答案里了，只是它还连得上 ⇒ "钉旧了"不等于"坏了"）。
+    不周期对账，哪天 apt 或 npm 突然坏，第一眼会误判成"网络又不通了"。要不要我把它挂进那条开机服务，等他点头。
 
 ## 遗留问题
 
