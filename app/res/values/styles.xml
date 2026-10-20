@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 窗口底色直接钉成页面自己的深色（#0b0d12）。
+         为什么不用现成的 Theme.DeviceDefault.Light.NoActionBar（0.2 那版就是）：
+         亮色主题的窗口底色是白的，冷启动会先刷一屏白再变成深色页面 —— 他报"感觉比较迟钝、
+         不像真正的桌面端"里就包含这一闪，肉眼把它读成"卡了一下"。
+         windowBackground 给字面色，等于让第一帧就是最终底色，中间没有换色这一步。 -->
+    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">#ff0b0d12</item>
+        <item name="android:statusBarColor">#ff0b0d12</item>
+        <item name="android:navigationBarColor">#ff0b0d12</item>
+    </style>
+</resources>

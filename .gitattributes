@@ -1,0 +1,18 @@
+# 为什么要有这个文件：工作区仓 `core.autocrlf=true`（2026-10-20 读数），而本项目里有一批文件是
+# **要按字节推到 Android 上跑的交付物** —— `tools/deploy-entry.sh` 每推一份就比一次本地/机上字节数，
+# 五份里只有 `dsh-chroot.sh`、`dsh-console.sh` 两份带"剥 CR"那一步，其余三份（`dsh-entry.js`、
+# `dsh-compat.js`、`dsh-entry-check.sh`）是按"仓库里零 CR"直接推的。仓库一旦在下次检出时把 LF 换成
+# CRLF，轻那三份的字节校验全红，重则入口那份 node 脚本带着 CR 落进 chroot —— 那不是我想要的失败形状。
+# 所以这里把这几类钉成 LF，跟 `.gitignore` 一样只管本目录。
+*.sh        text eol=lf
+*.js        text eol=lf
+*.py        text eol=lf
+*.java      text eol=lf
+*.xml       text eol=lf
+*.json      text eol=lf
+*.txt       text eol=lf
+# 二进制：别让 git 去"规范化"它们，APK 与图标一旦被动过一个字节，sha 就对不上装机那一发了。
+*.png       binary
+*.apk       binary
+*.jar       binary
+*.ko        binary

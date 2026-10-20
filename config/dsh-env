@@ -1,0 +1,23 @@
+# /root/.dsh-env — dsh 拉起前唯一的环境变量入口（dsh-chroot.sh 的 --web 会 source 它）
+# 权限 0600，属主 root。这个文件由 dsh-mobile 项目维护，2026-10-20 第一次创建
+# （创建前它并不存在：启动脚本写的是 `. /root/.dsh-env 2>/dev/null`，缺文件时静默跳过）。
+#
+# 档位这一行的真源（实测读自本机上游包，不是推测）：
+#   @deepseek-ai/dsh-base/cordis.patch.yml:246
+#     mode: !!js process.env.DSH_PERMISSION_MODE ?? 'workspace-write'
+#   同文件:262
+#     policy: !!js "(process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'never' : 'ask'"
+# 也就是这一个变量同时决定沙箱档位和审批策略，所以只在这里改，不要在
+# profiles/web/cordis.patch.yml 里再钉一遍 sandbox-policy —— 两处会互相遮蔽。
+#
+# 三个合法值：read-only / workspace-write / danger-full-access。
+# 写错值不静默：dsh-sandbox-policy 在插件加载时校验，档位非法会直接报错起不来。
+#
+# 本机现状（2026-10-20 读数）：内核 CONFIG_USER_NS 与 CONFIG_SECURITY_LANDLOCK 都是 not set，
+# 上游 0.2.1-rc.2 没有 android 平台链、也没有 proot/自定 runner 的配置位，所以 workspace-write
+# 下 bash 类工具会明确拒绝执行（原生文件工具不受影响）。要用 bash 只能显式改成 danger-full-access，
+# 那一改等于关掉进程沙箱 + 审批变 never，属于扩大暴露面，需机主自己点头。
+export DSH_PERMISSION_MODE=workspace-write
+
+# DeepSeek key 如果以后改用 API key 而不是账号登录，写在这里（不要把值贴进聊天）：
+# export DEEPSEEK_API_KEY=...

@@ -1,0 +1,9 @@
+downloads/
+app/local/
+app/out/
+reference/gh-3p/
+# 这三条同一理由：都是从 GitHub 拉下来的上游/别人项目，各自带自己的 .git，
+# 被 add 进去会变成"嵌入式仓库"（gitlink）—— 工作区仓里留下一个没有 .gitmodules 的坏引用，
+# 而内容本身随时可以再 clone 回来，不值得入库。2026-10-20 首入库时按这条处理。
+reference/gh-deepseek-harness-android/
+reference/gh-deepseek-harness-termux/

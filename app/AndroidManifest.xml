@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.zhl.dsh"
+    android:versionCode="6"
+    android:versionName="0.6">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 0.6 起多了两条：语音输入插件在页面里调 getUserMedia({audio:true})，WebView 那边要先把
+         系统层的 RECORD_AUDIO 拿到手，才谈得上给网页授权。第二条不是可选的 —— MODIFY_AUDIO_SETTINGS
+         缺了的时候，Chromium 即使 RECORD_AUDIO 已经 granted 也照样把媒体请求拒掉，这条先例的出处
+         和它的真机型号写在 DSHA 的 docs/releases/v0.1.7-rc2-apk-size.md:30（vivo V2463A / Android 16 /
+         WebView 150），我这里是照抄结论、没在自己的机上单独验过。
+         uses-feature required=false：这台机肯定有麦克风，但钉成 true 会让某些渠道把包装成"不支持"，
+         所以照先例声明成可选。除了这两条，仍然不申请存储、不申请网络状态：
+         麦克风之外的一切能力还是不往 native 侧拿（见 MainActivity 里 requestMic 那段）。 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true">
+
+        <!-- 只有这一台机器的 127.0.0.1:3080 能进来，所以 INTERNET 是唯一权限；不申请存储、不申请网络状态
+             ↑ 这句到 0.6 为止不再成立：上面多了 RECORD_AUDIO 与 MODIFY_AUDIO_SETTINGS 两条，
+               为的是语音输入插件要能在页面里录音。"不申请存储"这条仍然没动（0.6 没碰它）。 -->
+        <!-- theme 换成 res/values/styles.xml 里那一份（窗口底色=页面底色），理由写在那文件头上。
+             enableOnBackInvokedCallback=false —— 0.3 那版这段注释里"事实与推断要分开"写着没量过，
+             现在有了他那条读数（2026-10-20 晚）：**在聊天首页侧滑一下返回，直接退到桌面**。
+             这条读数说明两件事：① 返回这一发确实到了 Activity（不是被谁吞了）；
+             ② 0.3 那段"能后退就在 WebView 里后退"在首页上是正确行为（首页确实没有可退的一层），
+             缺的是他要的第二层——在首页按返回应该先问一句"要不要退出"，而不是直接掉回桌面。
+             0.4 就是把这层补上（MainActivity.handleBack()），并保留这个旗标：预测式返回一旦接管，
+             onKeyDown 这条路就没了，所以两个入口（onKeyDown / onBackPressed）都接到同一个函数，
+             哪条真被走到由 shell.log 里那行 back= 说话。
+             全屏（隐藏状态栏）没写在这里：manifest 那条 windowFullscreen 管不到导航栏，
+             0.4 是运行时调 WindowInsetsController（见 MainActivity.goFullscreen()）。 -->
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode|density"
+            android:enableOnBackInvokedCallback="false"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/AppTheme"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
