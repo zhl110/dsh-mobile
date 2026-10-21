@@ -1392,3 +1392,6 @@ recommends 各批多拖进来的差集：**77 / 0 / 40 / 49 个**（52.3 / 0 / 2
 `doh-hosts.sh --check` 顺手复点：`pypi.tuna.tsinghua.edu.cn` 与 DoH 现回**一致**、`www.modelscope.cn` 一致，
 **`registry.npmmirror.com` 漂了**（钉的 `111.62.184.148` vs 现回 `120.226.59.135`）—— **这条我只对账没验连通**，npm 现在能不能下东西本轮没测（他要是哪天撞上 npm 装不动，先看这条）。
 **两个仓都还没提交这一轮**（他说提交我才提交；pathspec 写法见 14.29 末）。
+**→ 23:19 他一句「提交」，上面这句按读数作废**：两发各 50 个文件（39 新 / 11 改、`+6,835 / −2,332`）—— 工作仓 **`6338ab9`**、父仓 **`3dd37f49`**（pathspec 只带 `dsh-mobile/`，他别的暂存一条没动）；
+两边 `git status --short -- .` 都回 **0 行**，`RUNBOOK.md` / `config/dsh-env` / `手机端情况.md` 三件的 blob 号在「工作仓树 = 父仓树 = 盘上 `git hash-object`」三处**全等**（`b8d0945a` / `dfe8cd8d` / `9a3512c8`，含那件 CJK 文件名的）；
+身份走单发 `-c user.name/-c user.email`，**没改 git 配置**。**没 push**（他这轮只说提交）⇒ `origin/main..HEAD` 差 **1 发** `6338ab9`。
