@@ -862,7 +862,8 @@ npm 侧一条要看清：**包名不是 `dsh-market` 而是 `dshmarket`**（npmm
    **→ 23:1x 他一句「提交」，上面那句作废**：两发都进去了 —— 工作仓（本目录，`origin = zhl110/dsh-mobile`）**`6338ab9`**、父仓（`D:\mycode`，pathspec 只带 `dsh-mobile/` 前缀）**`3dd37f49`**，
    各 **50 个文件**（39 新 / 11 改）、`+6,835 / −2,332`，`git status --short -- .` 两边都回 **0 行**；三处 blob 对账全等（`RUNBOOK.md` `b8d0945a`、`config/dsh-env` `dfe8cd8d`、`手机端情况.md` `9a3512c8` 在**工作仓树 = 父仓树 = 盘上 `git hash-object`** 三处同号）。
    身份按已知坑那条走**单发传参** `-c user.name/-c user.email`（本仓没有 git 身份，**没改任何 git 配置**），作者落的是他 `再来一杯海星酒 <1828980455@qq.com>`。
-   **没 push**：他说的是"提交"，`origin/main..HEAD` 现在差 **1 发**（`6338ab9`），推不推等他一句。
+   **没 push**：他说的是"提交"，所以只提交。23:19 当场量 `git rev-list --count origin/main..HEAD` = **2**（`6338ab9` + 回填提交号那发），远端仍停在 `22faf1d`。
+   **认这个数只认当场跑那条命令**：写这句话的这一发本身会让计数再 +1，所以别把文档里的数当恒等值。推不推等他一句。
 
 
 
