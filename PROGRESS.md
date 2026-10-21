@@ -3,6 +3,7 @@
 > **接班先读这一段（2026-10-21 傍晚改写，给冷启动的人）**
 > 最新一格是**状态 31**（他一句"提交到我的 GitHub 仓库里去，权限是私密的"。查出来 `D:\mycode` 那仓**从没配过 remote**（227 发全在本地），他账号下是一项目一库、没有 dsh-mobile
 > ⇒ 新建**私密**库 `zhl110/dsh-mobile`，本目录成了独立 git 仓（照他 `agent-hub` 那个"父仓照样跟踪 + 子目录自己有 `.git`"的形状），历史用 `git subtree split` 切过来：**5 发 / 109 个文件 / 名字+blob 双列对账空输出**。
+> **已经推上去了（北京 19:40）**：`git push -u origin main` 退出码 0，两边**同号** `bf18e733be…2919`、提交数 **6=6**、文件数 **132=132**，`gh` 回 **`private=true`/`PRIVATE`**；远端树里 `downloads/`、`reference/gh-3p/`、`app/out/` 各 **0** 条。那把 fine-grained PAT **能建库**（这条本轮才量出来，之前是未知）。
 > **这一格里我自己摔了一发并还原**：`git init --initialBranch=…` 选项名少连字符 ⇒ init 失败，后面用 `;` 串的四条 git 命令**往上找到父仓**、把它的 `main` 挪走并 reset 了 index；靠 reflog 找回 `175bcfbf`，**盘上一个字节没动**，代价只是"他暂存区若有东西会被打回未暂存"。全文 **RUNBOOK 14.29**。）
 > 再往前是**状态 30**（他回来报的两个症状，北京 18:5x–19:1x 手机在场一整轮：**插件市场一直转圈**查到两条叠在一起的根因（区早已落盘成 `global` 且永不重探 ＋ 那个区的两个目录 host 一个都没钉进 hosts），
 > 按他「**两个都弄，当场重启**」改完了 —— `tools/doh-hosts.sh` 钉名单加 `awesome-dsh-plugin.com`（新增 1 条、备份 sha 撞了才写）、
@@ -980,7 +981,9 @@ npm 侧一条要看清：**包名不是 `dsh-market` 而是 `dshmarket`**（npmm
 6. **验收认三个数**：本地 `rev-list --count HEAD` = 远端 `rev-list --count origin/main`；远端树文件数 = 本地 `git ls-files | wc -l`；`gh repo view --json visibility` 回 **PRIVATE**。
 
 **没做**：没推整个工作区（他其他项目的东西一个字节都没出去）；没动 `agent-hub`；没删父仓那发 `dsh-mobile-split` 分支（留着当还原依据，他说删我就删）；没配 SSH；`gh` 用的还是那把 fine-grained PAT。
-**本轮提交号**：本目录仓 = `<待 push 回来填死>`；父仓 = `<同上>`。
+**本轮提交号**：本目录仓填到 **`bf18e73`** 为止（本轮全部工作 + 状态 30 那格成果 + 这两发事故记录）；再往后的号不往文档里抄（抄了就得再来一发、又没号可填），要认当场取：本仓 `git log --oneline -3`、父仓 `git -C /d/mycode log --oneline -1 -- dsh-mobile`。
+**推送验收三个数全等（北京 19:40）**：本地 `rev-list` **6** = 远端 `origin/main` **6**；本地 `ls-files` **132** = 远端 `ls-tree -r` **132**；两边 HEAD 同号 `bf18e733be…2919`；`gh` 回 **`private=true` / `PRIVATE`**。
+远端树里 `downloads/`、`reference/gh-3p/`、`app/out/` 各 **0** 条；`lfs/objects` 回 Not Found ⇒ 无 LFS。全文读数与那发"PAT 能不能建库"的答案在 **RUNBOOK 14.29** 末。
 **等他一件事**：`github.com/zhl110/dsh-mobile` 这形状是不是他要的（要不要 README、`reference/` 要不要也带上）——这条只能他眼睛看。
 
 

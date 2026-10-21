@@ -2681,3 +2681,27 @@ proot 相关那一族（`nativeLibraryDir` 躲 W^X、不 bind `/linkerconfig`、
 **推送与验收（这一格等 push 回来填死）**：`gh repo create zhl110/dsh-mobile --private` → 加 `origin` → `git push origin main`。
 认的是三个数：**本地 `rev-list --count HEAD`** = **远端 `rev-list --count origin/main`** = split 后的发数 + 本轮提交；`gh repo view --json visibility` 回 **PRIVATE**；
 远端树里文件数 = 本地 `git ls-files | wc -l`。
+
+**→ 做完了，读数如下（北京 19:39–19:40；这一段就是上面那句"等 push 回来填死"的填死，别删上面那句）**
+
+- **建库**：`gh repo create dsh-mobile --private --source . --remote origin --description "…"` ⇒ 回 `https://github.com/zhl110/dsh-mobile`，退出码 0；
+  `gh api repos/zhl110/dsh-mobile` 回 **`private=true`、`default_branch=main`、`created_at=2026-10-21T11:39:58Z`（=北京 19:39:58）、`pushed_at=11:40:13Z`（=北京 19:40:13）**。
+  ⇒ **那把 fine-grained PAT 能建库**，不用他先在网页上手动建空库，也不用改 SSH（这条是本轮之前没量过的，已写进 `## 下一步` 第 27 条的猜测已被读数否掉）。
+- **推**：`git push -u origin main` ⇒ `* [new branch] main -> main`，退出码 0，`main` 已 track `origin/main`。
+- **三个数全等**：本地 `rev-list --count HEAD` = **6** ⇔ 远端 `rev-list --count origin/main` = **6**；本地 `git ls-files | wc -l` = **132** ⇔ 远端 `git ls-tree -r --name-only origin/main | wc -l` = **132**；
+  `git rev-parse HEAD` 与 `git rev-parse origin/main` **同一个号** `bf18e733be62760c3f550a6cb73399cfe56c2919`。
+  `gh repo view --json visibility,isPrivate` 回 **`PRIVATE` / `true`**。
+- **不该出去的确实没出去**（远端树里逐条数）：`downloads/` **0** 条、`reference/gh-3p/` **0** 条、`app/out/` **0** 条。远端顶层 12 项：`.gitattributes .gitignore AGENTS.md PROGRESS.md RUNBOOK.md app config docs reference scripts tools 手机端情况.md`
+  ⇒ **`手机端情况.md` 那个 CJK 文件名在 API 侧列得出来**（`gh api …/contents/`），没被转义搞坏。
+- **LFS**：`gh api repos/zhl110/dsh-mobile/lfs/objects` 回 **`Not Found`** ⇒ 这库里**没有 LFS 对象**，与上面 `check-attr` 那读数是同一件事的两头（GitHub 那边不占 LFS 存储与流量配额）。
+  `git count-objects -vH`：loose 51 件 11.32 MiB + pack 146 件 1.18 MiB（四张图标 PNG 压不动，所以 loose 那 11 MiB 就是它们）。
+- **本轮提交号只填到 `bf18e73`**（上面正文那一发：本轮全部工作 + 状态 30 那格的成果 + 这两发事故的记录与改口）。
+  **再往后的号不往本文里抄** —— 记这条的时候我还没号可填，填了就得再来一发、又没号可填，这是死循环。要认就当场取：
+  本仓 `git log --oneline -3`、父仓 `git -C /d/mycode log --oneline -1 -- dsh-mobile`。
+
+**又一发小坑（新仓没有身份，别改他的 git config）**：`git commit` 在这建新仓里报 **`Author identity unknown`**（`user.name`/`user.email` 是**父仓 repo-local** 配的，全局没有），
+错误里那行 `got '周海龙@…(none)'` 还把中文用户名打成了乱码。我**没有**去写 `git config`（他的规矩：不改 git 配置），
+改成单发传参：`git -c user.name="$NAME" -c user.email="$MAIL" commit …`，那对值从 `git -C /d/mycode config user.name|user.email` 取来（`再来一杯海星酒 <1828980455@qq.com>`），
+⇒ 提交出来的 author 与 committer 和他原本那 5 发**完全一致**（`git log -1 --format='%an <%ae> / %cn <%ce>'` 复点过），新仓也没多出一条我没经他同意就写下的配置。
+以后在本目录建仓类新仓第一次提交都走这条；若他要新仓自带身份，那是他一句话的事（`git config user.*` 我没动）。
+

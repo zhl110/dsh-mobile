@@ -221,6 +221,13 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
   ⇒ 别以为"提交"就等于"上传"；要上 GitHub 得走本目录这个嵌套仓。他账号 `zhl110` 下的库是**一项目一库**
   （`agent-hub`/`litellm`/`speaknow` 私密，其余公开），`gh` 用 fine-grained PAT、`agent-hub` 的 remote 走 **SSH** ——
   两条认证路径不是一个东西，别拿一条的成功推另一条的可行。
+  **→ 本轮（10-21 晚）当场量掉了这半**：那把 fine-grained PAT **能建库**（`gh repo create dsh-mobile --private --source . --remote origin` 退出码 0，
+  建出来 `private=true`），所以"新建私密库"不用他先去网页上手动建。`agent-hub` 那条 SSH 与 `litellm`/`speaknow` 仍各管各的，本轮没碰。
+- **新建的仓没有 git 身份**：`user.name`/`user.email` 是**父仓 repo-local** 配的（`再来一杯海星酒 <1828980455@qq.com>`），全局没有 ⇒ 新仓里第一次 `git commit` 报
+  **`Author identity unknown`**（错误行还会把中文用户名打成乱码，别以为那是编码坏了）。
+  解法**不是**去 `git config`（他的规矩：不改 git 配置），是**单发传参**：
+  `git -c user.name="$(git -C /d/mycode config user.name)" -c user.email="$(git -C /d/mycode config user.email)" commit …`
+  ⇒ 提交出的 author/committer 与他原有那几发一致，仓里也不多出我没经同意写下的配置。
 - **父仓与工作仓双轨跟踪同一批文件**（`agent-hub` 早就是这个形状）：`D:\mycode` 里那些 `dsh-mobile/…` 条目**不会**因为
   本目录有了 `.git` 就消失，`git add dsh-mobile/AGENTS.md` 在父仓里照样能更新 blob。所以**每轮两边各提交一次**，
   父仓那次的 pathspec 必须带 `dsh-mobile/` 前缀（铁律 9）。
