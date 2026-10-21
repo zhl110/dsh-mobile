@@ -323,6 +323,9 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
 - **父仓与工作仓双轨跟踪同一批文件**（`agent-hub` 早就是这个形状）：`D:\mycode` 里那些 `dsh-mobile/…` 条目**不会**因为
   本目录有了 `.git` 就消失，`git add dsh-mobile/AGENTS.md` 在父仓里照样能更新 blob。所以**每轮两边各提交一次**，
   父仓那次的 pathspec 必须带 `dsh-mobile/` 前缀（铁律 9）。
+- **往文档或提交正文里写"提交号 / 还差几发"之前，先当场 `git log` 与 `git rev-list --count origin/main..HEAD` 复点**（10-21 深夜连犯两次）：
+  ① 把上一发的改动内容凭印象安到了本发头上（真号是 `6338ab9` 的改动我写进了 `c02e4ab` 的正文）；② 把工作仓上一条的号写成"641…"这种**没查就编的前缀**（真号 `a1bf414`）。
+  另外"现在差 N 发没推"这类数**会自愈**：写这句话的那一发本身就让计数 +1 ⇒ 文档里只写"23:19 当场量到 N"，不写恒等值。两处都**不 amend、不改历史**，只在下一条里更正并留痕。
 - **`findmnt --target` 在这台 chroot 里判不了"只读"**（14.33 五，探针 72）：对 `/etc` 它回的是**底下那层 f2fs 的挂载选项**（看着像 rw 其实上层已冻），
   对 `/phone` 一次回**两行**（`/dev/block/dm-74[/media/0] /phone`）。要判"写不写得进"只有真写一发再删（本轮没做，所以 14.33 那条只写"没用它下结论"）。
 - **会话记录里 `tool/call` 的 `data.arguments` 是一个 JSON *字符串*，不是对象**（14.33 二）：`jq '.data.arguments.command'` 回空、`node` 里 `obj.data.arguments.command` 也空，
