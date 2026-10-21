@@ -15,13 +15,15 @@
 //   node scripts/dsh-cdp.js --watch 12                   盯 12 秒：打印这期间所有请求(方法 路径 状态)与 console
 //   node scripts/dsh-cdp.js --click "a[href*=plugin]"    在页面里对第一个匹配元素 dispatch 一次真点击，
 //                                                        然后自动带 6 秒 --watch（点了没反应时看它到底发了什么）
+//   node scripts/dsh-cdp.js --tapsel ".uV2eYG_input"      对元素中心发一次"真触摸"（要弹软键盘只能用它，
+//                                                        --click/focus() 都不算用户操作，键盘不出来）
 //   node scripts/dsh-cdp.js --pid 23670                  手动指定 WebView 进程号（默认自己从 /proc/net/unix 找）
 //
 // 前提：手机亮着且 App 在前台 —— 屏幕一灭，Activity 走 onPause，壳里那句 pauseTimers() 会把页面
 // 定时器停掉，渲染进程也可能被冻结；那时候的"没反应"是我们的判据在骗人，不是页面的事实。
 // 所以本脚本第一件事就是查 mWakefulness，Dozing/Asleep 直接拒绝跑（除非 --force）。
 //
-// 只读优先：--eval / --watch 不动状态；--click 会真的点一下，用它之前想清楚点的是哪个按钮。
+// 只读优先：--eval / --watch 不动状态；--click 与 --tapsel 会真的点一下，用它之前想清楚点的是哪个元素。
 // 本脚本不打印 cookie 与 Authorization 头（口令与 token 都在里头）。
 
 const { execFileSync } = require('child_process');
@@ -174,6 +176,42 @@ async function main() {
       return JSON.stringify(info); })()`;
     const r = await cdp.send('Runtime.evaluate', { expression: js, returnByValue: true, awaitPromise: true, userGesture: true });
     console.log('点击：' + (r.result ? r.result.value : JSON.stringify(r.exceptionDetails || {})));
+  }
+  // --tapsel <选择器>：量出元素中心，再用 CDP 的 Input.dispatchTouchEvent 发一次"真触摸"。
+  // 为什么不用 --click：那是 el.click()，DOM 层的事件，安卓不认它是用户操作 ⇒ 软键盘不会弹。
+  // 实测（2026-10-21 晚，探针 downloads/kbd-212522/）：focus() 之后 mInputShown 仍 false，
+  // 页面 innerHeight 一动不动 —— 那不是"窗口没被压小"的证据，是键盘压根没出来。
+  // 所以量键盘这件事必须走触摸通道，不能用 focus，也不能用 adb input tap（那是物理像素，dpr=4 还得换算）。
+  const tapsel = arg('tapsel');
+  if (typeof tapsel === 'string') {
+    const q = `(() => { const el = document.querySelector(${JSON.stringify(tapsel)});
+      if (!el) return 'NO'; const r = el.getBoundingClientRect();
+      return Math.round((r.left + r.width / 2) * 10) / 10 + ',' + Math.round((r.top + r.height / 2) * 10) / 10; })()`;
+    const rc = await cdp.send('Runtime.evaluate', { expression: q, returnByValue: true });
+    const pt = rc.result && rc.result.value;
+    if (!pt || pt === 'NO') console.log('!! 页面上没有这个元素：' + tapsel);
+    else {
+      const xy = String(pt).split(',');
+      const X = parseFloat(xy[0]), Y = parseFloat(xy[1]);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: X, y: Y }] });
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      console.log(`对 ${tapsel} 的中心 ${X},${Y}（页面 CSS 坐标）发了一次真触摸 touchStart+touchEnd`);
+    }
+  }
+  // --scroll "x,y,dy"：让 WebView 自己合成一次**真触摸滚动**（CDP 的 synthesizeScrollGesture）。
+  // 为什么不用 scrollTop 赋值代替：那只能证明"这层能滚"，证明不了"手指划得动"。
+  // dy 负数 = 内容往下走（往下看），正数 = 往上。坐标是页面 CSS 像素。
+  const scroll = arg('scroll');
+  if (typeof scroll === 'string') {
+    const pp = String(scroll).split(',');
+    const SX = parseFloat(pp[0]), SY = parseFloat(pp[1]), SDY = parseFloat(pp[2]);
+    if (![SX, SY, SDY].every(isFinite)) console.log('!! --scroll 要 "x,y,dy"');
+    else {
+      const r = await cdp.send('Input.synthesizeScrollGesture', {
+        x: SX, y: SY, xDistance: 0, yDistance: SDY, gestureSourceType: 'touch', speed: 1200, preventFling: true,
+      });
+      console.log('已合成一次触摸滚动 x=' + SX + ' y=' + SY + ' dy=' + SDY + ' ⇒ ' + JSON.stringify(r || {}));
+    }
   }
   const secs = click && !watch ? 6 : watch;
   if (secs > 0) {

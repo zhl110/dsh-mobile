@@ -150,6 +150,11 @@ FunnelCakes 的 `config/cordis.patch.yml` 注释写得很直白：Android 上 bw
    `mexiaosqwq/dsh-web-mobile` v3.2.0 自陈"**兼容 0.2.1 及以后**"，装法是官方的
    `dsh plugin --profile web add dsh-web-mobile` —— 走插件层就不怕升级冲掉。
    我们的 `tools/dsh-compat.js` 是打进 `dist/` 的，升级即失效（RUNBOOK 10.11 已经认了这个账）。
+   → **2026-10-21 晚两处改口，这句按现状读**：① **"打进 `dist/`、升级即失效"已经不成立** —— 兼容层现在由常驻入口在 serve 时
+   **出口内联**（按 mtime 热读 `/root/.dsh/entry-compat.js`），盘上 `dist/index.html` 逐字节等于上游 825 B、`assets/dsh-compat.js` 已删，
+   细则在现役 [RUNBOOK.md](RUNBOOK.md) 14.15/14.30，那两节旧文（10.11 / 13.4）已搬进 [RUNBOOK-archived.md](RUNBOOK-archived.md)，
+   定位一条命令：`grep -n "^## \|^### " RUNBOOK-archived.md`。② 它现在除了 polyfill 还带**横屏侧栏可滚动**那段（他 10-21 报的症状），
+   所以"照抄插件层"这条不再是唯一出路 —— 但它给的**底部 sheet、刘海安全区、键盘跟随**我们仍然没有，那部分账照旧。
    它顺带还做了：弹窗变底部 sheet、刘海安全区、大 JSON 自动 gzip/brotli、768–1023px 平板档限宽居中。
 2. **`manifest display: fullscreen` 是错的，`standalone` 才对。**
    FunnelCakes 实测：fullscreen 沉浸模式下软键盘弹出不收缩视口、没有几何信号，输入框直接被盖住；

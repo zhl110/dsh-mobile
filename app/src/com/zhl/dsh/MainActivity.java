@@ -92,6 +92,7 @@ public class MainActivity extends Activity {
     private int retryLeft = 2;
     // 0.5 换掉 0.4 那张 AlertDialog：退出的意思改用一枚自己会消散的浮层表达（见 showExitHint）。
     private FrameLayout root = null;             // WebView 外面那一层，只为给浮层一个落点
+    private int lastImePad = -1;                 // 0.7：上一次给 root 的下内边距（=输入法那截高度），只在变了的时候动手
     private TextView hint = null;                // 那枚"再按一次返回"的浮层，null = 从没建过
     private long hintUntil = 0;                  // 过了这个时刻，下一次返回就不再算"第二下"
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -314,6 +315,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         goFullscreen();       // 他要的"打开就是全屏"：状态栏与导航栏进来就收掉，见 goFullscreen 那段注释
+        watchImeInset();      // 0.7：键盘弹起来要把输入框顶上去，原因与实测判据见 watchImeInset 的注释
         L("lifecycle", "onCreate｜WebView 已建、准备 loadUrl");
         String direct = fromIntent();
         if (!empty(direct)) loadDirect(direct);
@@ -345,6 +347,50 @@ public class MainActivity extends Activity {
                   | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
             L("fullscreen", "已请求隐藏（API " + Build.VERSION.SDK_INT + " 走旧旗标那条路）");
         }
+    }
+
+    /**
+     * 0.7：软键盘弹起来时，把聊天输入框顶到键盘上方（他 2026-10-21 的原话：「输入法跳上来之后，
+     * Harness 里那个输入框也应该同步上提，就像微信、QQ 发消息那样，否则我看不见自己打的字」）。
+     *
+     * 为什么 manifest 里那条 adjustResize 不顶用：0.4 起这个 App 是沉浸式全屏
+     * （goFullscreen 里 hide(systemBars()) + BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE），
+     * 全屏布局下窗口不再为输入法让出高度 —— 输入法是**盖**在 WebView 上面的。
+     * 实测证据（downloads/kbd-212829/）：用 CDP 对输入框中心发一次真触摸之后，安卓侧
+     * mInputShown=true，而页面里 window.innerHeight 与 visualViewport.height 都还是 360、
+     * 输入框 top/bottom 一动不动（240/276） ⇒ 页面收不到"键盘有多高"这个信号，纯前端修不了。
+     *
+     * 为什么不在页面里猜一个键盘高度：猜错了要么白抬一截、要么还是被盖住，而且横竖屏/换输入法都得重猜。
+     * 顺带记一个假读数（downloads/kbd-212522/）：第一版我用 focus() 唤键盘，mInputShown 一直 false，
+     * 那次的"窗口没变化"是**键盘根本没出来**，不是结论 —— 量键盘必须走真触摸（scripts/dsh-cdp.js --tapsel）。
+     *
+     * 做法：把输入法那截 inset 变成 root 的下内边距。WebView 是 root 里 MATCH_PARENT 的那个子，
+     * 父层被压小 ⇒ 它自己的视口变小 ⇒ 页面里"贴视口底"那套布局自己就顶上去了，键盘收回时 inset 归 0 复原。
+     * 全程不改他的页面，也不动 0.4 那条全屏（状态栏该藏还是藏）。
+     *
+     * 只挂 API 30+：WindowInsets.Type.ime() 是 30 才有的（这台是 35）。30 以下保持原状，
+     * 并且把这一条明确打日志出来，别让下一个人以为"装了就没生效"。
+     */
+    private void watchImeInset() {
+        if (Build.VERSION.SDK_INT < 30) {
+            L("ime", "API " + Build.VERSION.SDK_INT + " 没有 Type.ime() ⇒ 这一版不做键盘顶起（这台机是 35，走不到这条）");
+            return;
+        }
+        if (root == null) { L("ime", "root 还没建，监听没挂上"); return; }
+        root.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+            @Override
+            public WindowInsets onApplyWindowInsets(View v, WindowInsets in) {
+                int ime = in.getInsets(WindowInsets.Type.ime()).bottom;
+                if (ime != lastImePad) {
+                    lastImePad = ime;
+                    v.setPadding(0, 0, 0, ime);
+                    L("ime", "输入法 inset=" + ime + "px ⇒ 已压给 root 的下内边距（WebView 跟着变矮）");
+                }
+                return in;
+            }
+        });
+        root.requestApplyInsets();
+        L("ime", "已挂输入法 inset 监听：root 下内边距随键盘起落");
     }
 
     @Override

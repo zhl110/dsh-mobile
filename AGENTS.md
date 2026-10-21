@@ -23,14 +23,17 @@ Termux 控制台（`/data/local/sh/dsh-console.sh` 菜单）与那个 16 MB 原�
 
 1. **插上手机先复点**：上一轮收尾会关 adb、手机也可能被拔掉。先 `adb devices` + 端口/进程各读一次，
    **不要假设"上次还在跑"**（PROGRESS 顶部写着怎么复点）。
+   **→ 10-21 深夜起再加一句**：现场可能被**手机侧那个 dsh 自己**动过（改 cordis / 换代 / 装包），"上次还在跑"之外还要撞**cordis 字节数、`dpkg -l` 数、引擎代际**三个数 —— 见铁律 18。
 2. 读 [PROGRESS.md](PROGRESS.md) 顶部「接班先读这一段」→ `## 下一步` → `## 遗留问题`。
-3. 要证据/要改口经过，再翻 RUNBOOK 的 14.x（14.21 = 语音模型那轮，14.22 = 网络那轮）。
+3. 要证据/要改口经过，再翻 RUNBOOK 的 14.x（14.21 = 语音模型那轮，14.22 = 网络那轮，**14.32/14.33 = 围堵与"手机侧自己动盘"那两轮**）。
 4. 设备侧动手一律先写只读探针，走 `tools/run-probe.sh`；**不要**手搓 `adb shell "su -c …"`。
 
 ## 目录职责
 
 ```
 dsh-mobile/
+├─ PROGRESS.md / RUNBOOK.md                 **现役两份**：进度与做法，冷启动只读这两份就够
+├─ PROGRESS-archived.md / RUNBOOK-archived.md  搬出去的封闭历史（原文一字未改），要翻旧账才来
 ├─ app/                 Android 壳源码（MainActivity.java / AndroidManifest.xml / build.sh / out 已忽略）
 ├─ config/dsh-env       服务环境真源模板（bash source 它，必须 LF）
 ├─ scripts/             引擎侧：dsh-chroot.sh（chroot 总入口）/ dsh-entry.js（常驻入口）
@@ -45,6 +48,18 @@ dsh-mobile/
 
 设备侧固定路径：rootfs = `/data/local/dsh-rootfs`；chroot 的家目录在宿主上看是 `rootfs/root`；
 runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁律 1）。
+
+**文档是「现役两份 + 归档两份」（2026-10-21 晚他一句"progress 还有 runbook 这些文件太长了…你要不要先给它整理一下"）**：
+搬的是行不是话 —— `RUNBOOK.md` 原第 49–2039 行整段进 `RUNBOOK-archived.md`，`PROGRESS.md` 原第 463–799 行（状态 12/13 到状态 25）整段进 `PROGRESS-archived.md`，
+**没有删、没有改写、没有用小节代替原文**（铁律 10）。四条规矩：
+① **新格子只写现役件**（RUNBOOK 从 14.24 起、PROGRESS 从状态 26 起）；
+② 要改归档里的旧读数 → **去归档件就地加箭头**，别在现役件重抄一遍（抄了就成两份事实，下一个人不知道信谁）；
+③ 引用"RUNBOOK 14.15"这类落点**照旧写** —— `RUNBOOK.md` 顶部那张索引表会把小节号指到归档件，`grep -n "^### 14.15" RUNBOOK-archived.md` 一步到行；
+④ **冷启动的顺序**：`PROGRESS.md` 顶部接班段 → `RUNBOOK.md` 第 0 节 → `## 下一步` / `## 遗留问题`；这四步读完就能答"手机上现在什么状态 / 最新一格 / 下一步 / 有哪些坑"，读不到归档不算失败。
+搬完的字节对账写在 `RUNBOOK.md` 那张索引表下面（那一行是读数，不是估的）。
+**→ 10-21 深夜补一句（状态 33 之后）**：拆完那两份**还是很大**（现役 `RUNBOOK.md` 134,265 B / 1,015 行、`PROGRESS.md` 162,985 B / 1,141 行，
+因为每轮都在长）⇒ **别整读**，按上面四步的区间读（第 0 节 = `RUNBOOK.md` 第 6–71 行，到"## 归档"那行之前；最新一格 = `grep -n "状态 33" PROGRESS.md` 往下到 `## 下一步`）；
+真要瘦身就再搬一轮，但**搬的口径必须是"现役件里只留最近 5 格"**，且先跟他对一句"你要留多近的史"再动 —— 这是他来定的取舍，不是我该自决的。
 
 **git 是两套（2026-10-21 晚他一句"提交到我的 GitHub 仓库里面去，权限是私密的"之后）**：
 本目录现在有**自己的** `.git`，remote `origin` = GitHub 私密库 `zhl110/dsh-mobile`，历史是从工作区仓
@@ -80,6 +95,22 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
    **git 默认会把 CJK 路径包上引号**（`core.quotePath` 没关）⇒ `"dsh-mobile/手机端情况.md"` 这种行**以引号开头**，
    任何 `grep '^dsh-mobile/'` 前缀过滤都会把它漏掉、`grep -vc` 会把它当成"范围外的东西"虚报一次越界。
    要按路径过滤就加 `-z`（NUL 分隔、不转义不引号）或 `-c core.quotePath=false`。10-21 那发父仓提交后我先被"1 条不是 dsh-mobile"吓了一跳，用 `-z` 复点才是 **0**。
+   **取 DoH 的 A 记录不许用贪婪 `sed`**（10-21 深夜 p56/p57 连错两发）：`sed 's/.*"data":"\([0-9.]*\)".*/\1/p'` 里那个 `.*` 会一路吃到**最后一个** `"data":"`，
+   打出来的是**末位**答案；CDN 每次轮转顺序，于是把"钉的就是首选"读成"漂了"。⇒ 认解析层只认 `doh-hosts.sh --check`（node 精确取 `Answer[0]`），别在探针里自造取数管道。
+   **在 `/etc/hosts` 里查一个域名要用字段相等**（同一晚同一种错犯在两份脚本上）：`awk '$0 ~ d'` 问 `github.com` 会先匹配到 `codeload.github.com` 那行、拿回隔壁那个 IP，
+   于是打出"钉 .165 / DoH .166 ⇒ 漂了"这种自己跟自己对账的假条。要 `awk -v d=$H '$2==d{print $1}'`。
+   **删掉自己正站着的目录 = 后面每一条都白跑**（p62 第一次整发作废）：`cd /tmp/x && … && rm -rf /tmp/x` 之后 cwd 是个空洞，
+   此后每条 `git` 都回 `fatal: Unable to read current working directory`、`rc=128`、`refs=0` —— **看着像"五个远端全拉不到"，其实一个字节都没发出去**。
+   ⇒ 删目录后面紧跟一句 `cd /`；凡是"整批发红"的读数，先怀疑自己的 cwd / 环境，再下网络结论。
+   **`GIT_ASKPASS=/bin/false` 不是"关掉认证"，是"把失败改成怪样子"**：真遇到私有库它回 `unable to read askpass response from '/bin/false'`，
+   与"仓库不存在"两种成因同为 `rc=128` ⇒ 判远端只认 **refs 计数 > 0**，不认 rc。
+   **探针会把自己算进"残留计数"**（p64/p65/p66 连报的"`/root/*.sh` = 3"其实是 **2 份常驻 + 当发探针**）：
+   `run-probe.sh` 跑完把机上两份副本都删，所以**脚本内任何时刻**的计数必然含它自己 ⇒ 报"还剩 N 个"要当场写明"含本探针"，
+   否则下一轮会把 3 读成"有 3 个残留"（14.31 那句"仍 9 份"就是这么虚高的，真值 8）。
+   **不许写没读过的数 —— 这是第四类错，与上面那三条计数器坑不同源**（14.32：我在 `RUNBOOK.md` §0 写壳 0.7 的 sha256 `c9edd7ee…`，
+   那个字符串**我从未在任何地方读到过**，盘上真值是 `be025bb3…`，而且是本机件与机上 `base.apk` **逐字节撞上**的那个）。
+   前三类是"取数管道挑错行"，这一类是"**根本没取就写**" ⇒ 落笔时凡是 sha / 字节数 / pid / 版本号，要么当场 `sha256sum`、要么引用某份 `downloads/pNN.txt` 的第几节，
+   否则就写"未取"。**APK 尤其危险**：同源码重打 sha 会变（见"已知坑"那条），凭记忆抄 sha 迟早对错发。
 3. **"通"的判据只认落字节**：`Range` 拿到 206 且头里有真内容、跟完 302 落到包体并解得开、音频真出字。
    端口在听 / HTTP 200 / 退出码 0 都不算。
    **按需触发的链路，"没报错"不算通过**（14.28）：dshmarket 只在页面打开那一刻才取目录 ⇒ 换代后 `log.ndjson` 一字节没长，
@@ -123,6 +154,33 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
     只 `pgrep | head -1` 就动手是错的（PID 会复用，光看 pid 不看 cmdline 会杀错人）。
     部署这文件走 `tools/deploy-env.sh`（备份→逐字节撞 sha256 才写→落点 md5 复点→`--revert` 还原），**`--check` 能查出机上还是旧发** ——
     14.28 就是这么发现 `config/dsh-env` 的 10-20 改动从没推上去过（机上一直 1,687 B）。
+14. **profile 配置放错 `id` 会被静默丢掉，而 `--dump-config` 不重启就能判死**（14.32，探针 67/68）：
+    `/root/.dsh/profiles/web/cordis.patch.yml` 是顶层 YAML 数组 `- {id, name, config}`；`- id: sandbox` = `@deepseek-ai/dsh-sandbox-local`（吃 `runnerCommand`/`runnerFailureSignatures`），
+    `- id: sandbox-policy` = `@deepseek-ai/dsh-sandbox-policy`（**只吃 `mode`/`workspaceRoot`**）。**两个包的 zod Config 都没有 `.strict()`**（`strict(` 命中 0）
+    ⇒ 键塞在错的 id 底下**不报错、不告警、直接丢**，于是"接了线其实没接"。所以**任何配置类改动，先 `dsh --profile web --dump-config` 在组合树里数命中**
+    （它打印完就退出、**不 mount、不起服务** ⇒ 不用重启、不用他在场）；命中 0 就别去重启引擎。
+    本仓 `RUNBOOK-archived.md:878`（14.11）那段示例就写错在 `sandbox-policy` 底下，**照抄它等于白接**，已就地加箭头。
+    （`--dump-config-schema` 在 0.2.1-rc.2 这版回 **rc=1**，用不了，别拿它当判据。）
+15. **声称"有围堵 / 被拦住了 / 会弹窗"之前，先查这棵树上有没有 `[dsh-purge]`**（14.32 是本轮最大的一条）：
+    这台机的 web profile 装着 purge，它把上游 **42 个文件**换成了直通实现 —— `dsh-sandbox-local` 的 `confine()` **永不包装 argv**（还回 `enforcement:"full"`，
+    光看这个字段会误判成"全围住了"）、`dsh-fs-sandbox` 的 `checkedTarget()` 不做越界检查、`dsh-user-approval` **在任何弹窗之前先回 `"allowed-once"`**。
+    ⇒ **判据顺序**：`ls /*.dshpurge.bak* | wc -l` + `grep -rl '\[dsh-purge\]' <包根> | wc -l`（两条口径，备份件 ≠ 真被改的文件）→ 再读那个函数**现在的正文**，
+    而不是读上游文档或它自己的注释。**别拿"服务 env 里有 `DSH_PERMISSION_MODE=workspace-write`"当"命令会被拒"的证据** —— 那要 `confine()` 真会去选 runner 才成立。
+    purge 是他装的（点「应用」），**我不自己撤**；要撤先跟他说清代价（撤了就回到"Bash 全灭、原生 read/glob/edit 能用"那个旧形状）。
+16. **探针脚本先本地 `bash -n` 再过 `tools/run-probe.sh`**（14.32 我在这条上连摔三次，全是同一形状）：
+    把 `awk 'NR==2{print $4" … "$2}'` 或带单引号的串**嵌在 `$(…)` 里再塞进 `"…"`**，`bash` 会把 `;`/引号解析成别的东西 —— 症状是 `syntax error near unexpected token`，
+    而且**是发上机之后才报**，白花一轮 adb。写法：**先把要算的东西赋给变量，再 `echo "$VAR"`**，别在 echo 里现套现。
+    本地一步就挡住：`bash -n scripts/dsh-xxx.sh`。
+17. **purge 在位时同一份代码盘上有两份，判行为只读真在加载的那一份，并写明读的哪份**（14.33，手机侧那个 dsh 就是栽在这儿）：
+    真加载的是 `/usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-sandbox-local/lib/index.js`（22,231 B、md5 `b976570f…`＝仓库 `downloads/sbx-dev-index.js`），
+    purge 动手前的原件在 `/root/.dsh/dsh-purge/host-backups/9dac90ce22cf7f551f319a5e.bak`（**同目录同文件名，内容是不带 `[dsh-purge]` 标记的那版**）。
+    它读 `.bak` 里的 `:311` 那条分支，就得出"填了 `runnerCommand` 就会包装 argv"——而真那份是直通的，接线是**死配置**。
+    ⇒ 判法两步：① `md5sum` 那个在加载的路径，与仓库孪生件撞（撞上了函数体可在本地读，不用上机 `sed`）；② 要证行为就**直接调那一次**（`node -e` 按它写的 cfg 调 `confine()`，看 `ARGV_HAS_RUNNER`），
+    别信"文件里有那个分支"。引用出处时写全 `lib/index.js` 还是 `*.bak`。
+18. **手机那台 dsh 现在是**第二个写手****（14.33 起）：它会自己改 cordis、自己 `kill -TERM` 换代、自己 `apt-get install`。
+    ⇒ 每轮接班"现场没变"这句要撞三个数才说得出：**cordis 508 B（我撤干净）/ 1,627 B（它接回的死配置）**、**dpkg 411 / 415**、**引擎代际与 pid**（现在是第 6 代 28833）。
+    并且：**它写的东西我不来回改**（撤/留等他一句，两个写手改同一个文件＝打转）；它的会话记录是取证入口 —— `session.v4.jsonl.zstd` 用机上 Node 的 `zlib.zstdDecompressSync` 解，
+    `tool/call` 的命令串在 **`data.arguments` 这个 JSON *字符串*里**（不是对象，见"已知坑"）。
 
 ## 常用命令（Windows 侧，git-bash）
 
@@ -138,7 +196,11 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
 | 让引擎换代并复点新 env 吃没吃到 | `bash tools/run-probe.sh scripts/dsh-engine-restart-and-verify44.sh downloads/p44.txt`（**它会 SIGTERM 引擎** ⇒ 要他在场；里面那段"杀前数身份"就是为这条服务的） |
 | 市场这一格动没动（**最便宜的一发，纯只读**） | `bash tools/run-probe.sh scripts/dsh-market-check-probe45.sh downloads/p45.txt`（三层现场 + `.dsh-market/` 两个文件的字节/行数/级别计数 + hosts 里那两个 host + `/proc/net/dev` 全表） |
 | 市场一直转圈 / 目录取不到 的深查 | `bash tools/run-probe.sh scripts/dsh-market-catalog-probe42.sh downloads/p42.txt`（只读：`state.json` 的区、`log.ndjson` 全文、四个目录地址、hosts 名单、`:3080` 与 `:3081` 各回什么码）；修法量法见 `…probe43.sh` |
-| 命令行问 dsh 一句 | `--run 'bash /root/dsh-ask.sh'`（问题写进 `/tmp/dsh-task`，不走 argv） |
+| 命令行问 dsh 一句 | `--run 'bash /root/dsh-ask.sh'`（问题写进 `/tmp/dsh-task`，不走 argv）**→ 10-21 晚 22:1x 起机上没这份了**（他让清残留，探针 64 删的 6 份里就有它，仓库孪生件 `scripts/dsh-ask.sh` 732 B 在）⇒ 现在要先 `bash tools/run-probe.sh scripts/dsh-ask.sh downloads/x.txt` 推上去再跑 |
+| 量"某批 apt 包要下多少 / 占多少盘"（一个不装） | `bash tools/run-probe.sh scripts/dsh-size-probe66.sh downloads/p66.txt`（两口径 + 每批最大 10 件 + recommends 差集；并集在 `…precheck-probe67.sh` 第 ① 节。**别拿 `apt-get -s` 找那两行**，它不打，见"已知坑"） |
+| 沙箱 runner 接线：接 → 验组合 → 重启 → 端到端 → 撤 | `scripts/dsh-wire-precheck-probe67.sh`（只读，先量接线位）→ `scripts/dsh-wire-probe68.sh`（写 cordis + `--dump-config` 判命中，**不重启**）→ `scripts/dsh-wire-restart-probe69.sh`（**SIGTERM 引擎**，含端到端 `confine()` 自测）→ `scripts/dsh-purge-trace-probe70.sh`（只读：purge 足迹 + 三个数的健康复点 + 逐字节还原）。读数为 `downloads/p67…p70.txt`，形状与"为什么现在是死配置"见 `config/cordis-sandbox-wiring.snippet.yml` 与铁律 14/15 |
+| **对账手机侧那个 dsh 自己写了什么**（状态 35 那一轮的五发，纯只读） | `scripts/dsh-agent-write-audit-probe71.sh` → `downloads/p71.txt`（cordis 现状/两份备份/`--dump-config`/手工调 runner/我的三层 md5。⚠ 它 ② ⑥ 两节路径写错 ⇒ 空读数，**空读数不能读成结论**）；`scripts/dsh-confine-recheck-probe72.sh` → `p72.txt`（**修正版**：模块真实路径、`confine()` 直调、围内/围外 `/proc/1/root` 对照、dpkg、hosts 对账、会话清单）；`73`/`74`/`75` → 同一份会话记录三次提取（73 抓错字段、74 抓到工具名但命令为空、**75 才把 44 条命令串全提出来**） |
+| 在机上读一份会话记录（`session.v4.jsonl.zstd`） | 见 `scripts/dsh-session-calls-probe75.sh` 第 ① 节那段的形状：`zlib.zstdDecompressSync` 解帧 → 按行 JSON → 取 `type==="tool/call"` → **`JSON.parse(data.arguments)` 才是命令**（`data.arguments` 本身是字符串）。FRAMES/LINES/DECOMP_FAILS 三个数要互相对得上 |
 | 重打 APK | `bash app/build.sh`（版本号在 `AndroidManifest.xml` 与 `build.sh` 两处） |
 | 重跑入口自测（**不需要手机**，Windows 侧就能跑） | `node scripts/dsh-entry.js --selftest`（2026-10-21 当场：`合计 58 条：PASS 58 / FAIL 0`；铁律 12） |
 | 换图标（切五档） | 先把满幅方图存成 `app/icon/icon-src.png`，再 `sh app/icon.sh`，最后重打 APK |
@@ -146,6 +208,10 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
 | 电脑上官方 DSH 的 CLI（不在 PATH） | `powershell -NoProfile -Command "cd 'D:\program files\DeepSeek\resources\runtime\cli\bin'; .\dsh.cmd plugin --profile desktop list"` |
 | 量手机侧现状（profile / pnpm / registry 出口，纯只读） | `bash tools/run-probe.sh scripts/dsh-plugins-probe32.sh downloads/p32.txt` |
 | 复点"这台机什么干不了"这类断言（含模型自己的自述） | `bash tools/run-probe.sh scripts/dsh-envclaim-probe33.sh downloads/p33.txt` |
+| **交付之后一整轮复点**（两层进程 / dpkg 数 / 命令逐个版本 / hosts 对账 / 兼容层 md5 / 出口内联计数） | `bash tools/run-probe.sh scripts/dsh-final-check56.sh downloads/p56.txt`（纯只读，读数形状就是本文件铁律 2 那套） |
+| 判"某条域名到底坏没坏"（别拿 IP 撞不撞当判据） | `bash tools/run-probe.sh scripts/dsh-hosts-drift-probe57.sh downloads/p57.txt` → 精确对账再补一发 `scripts/dsh-drift-recheck58.sh`（58 第 5 节那段 node 是唯一可信的"漂没漂"口径） |
+| 判 GitHub / gitee / 镜像这几跳今晚通不通 | `bash tools/run-probe.sh scripts/dsh-github-route-probe59.sh downloads/p59.txt`，替代路与落字节见 `…probe60.sh` / `…probe62.sh`（**git 能不能干活只认 `clone` 真落多少 KB**） |
+| 清我自己留在 chroot `/tmp` 的东西（白名单，逐个打印再删） | `bash tools/run-probe.sh scripts/dsh-tmp-hygiene61.sh downloads/p61.txt` |
 | 装之前置体检（本地清单 + 设备数 + chroot 有没有 pnpm） | `bash tools/install-phone-plugins.sh --check` |
 | 把 tarball 装进手机 `web` profile | `bash tools/install-phone-plugins.sh`（三计数：清单 / 推上去 / sha256 撞上，不等就停） |
 | 装 APK 但**不重打** | `bash tools/install-apk.sh`（只推现成那发；`--verify` 只比指纹、一个字节不写。**别用 `app/build.sh --install`**：它前六步无条件重打，sha 必变 ⇒ 报过的指纹作废） |
@@ -191,6 +257,10 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
 - **电脑那套装插件的路径不能照抄到手机**，三处不对等（每次动之前先想起来）：profile 名 **手机 `web` / 电脑 `desktop`**；
   宿主形态 **手机是 npm 装的全局 dsh，电脑是 Electron 的 asar + 解包 `resources\app`** ⇒ purge 的「应用」在手机上改的是什么、改不改得动，**未验**；
   `dsh plugin` 只是把参数转给 **pnpm**，电脑上有（11.28.5），**手机 chroot 里有没有还没读到**（没有就要 `npm i -g pnpm` = 往他机上装包 ⇒ 得他点头）。
+  → **2026-10-21 晚两条"未验/还没读到"都被读数结掉了（就地加箭头，旧话不删）**：① purge 在手机上**真改得动** —— 改的就是 npm 全局那棵树本身
+  （`/usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/**`，**42 个文件带 `[dsh-purge]` 标记 + 56 份 `.dshpurge.bak`**，mtime 2026-10-21 10:35:16–17Z），
+  生效内容见铁律 15（`confine()` 直通、`checkedTarget()` 不检查、审批先回 `allowed-once`）；**别再按桌面那套"解包目录优先加载"去手机上找 `resources\app`**，这边没有对应物；
+  ② **机上有 pnpm 12.14.0**（14.27 量的），装插件不用往他机上补包。
 - **PowerShell 用 `-Command "…"`（双引号）时，bash 会把 `$_` / `$LASTEXITCODE` 吃掉**：前者被换成上一条命令的最后一个参数
   （报 `/d/mycode/dsh-mobile.ProcessName 无法识别为 cmdlet`），后者变空（报`必须在"+"运算符后面提供一个值表达式`）。
   写 `\$` 转义，或者干脆用通配避开它们。
@@ -199,6 +269,10 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
   所以它报"`/system/bin` 整个不存在、一点 Android 接口都没有"——那是**我们的挂载选择**，不是限制，见 14.25 一·3）；
   ③ **建好了但没接线**（`dsh-unshare-run` 34 PASS 在位，profile 里没 `runnerCommand` ⇒ 它只能报"沙盒不可用、只能完全访问"，见 14.25 一·1）；
   ④ **在它视角外**（自启服务在宿主侧、常驻入口在 chroot 外，它按"PID 1 不是 systemd / 进程挂了没人拉"就判死，见 14.25 一·2）。
+  **→ 14.32 又出现第五种形状，比这四种都隐蔽**：⑤ **接线位接好了、上游函数却被插件换成了直通** ——
+  `runnerCommand` 已挂到 `- id: sandbox` 底下、`--dump-config` 命中 1、引擎也换成了吃到新配置的那代，**但 `confine()` 被 purge 换成"永不包装 argv"**
+  ⇒ 前面四条形状至少还能从配置/env 里推出来，这一种**任何配置读数都是绿的**，只有把上游函数**现在的正文**拉下来看才暴露（判法见铁律 15）。
+  顺带把 ③ 那句改口：**"只差接线"已经不成立了**，接线做过、撤过、撤法逐字节复点过（`config/cordis-sandbox-wiring.snippet.yml` 是待用的那两行）。
   复点工具是 `scripts/dsh-envclaim-probe33.sh`（走 `tools/run-probe.sh`）；**判网络那几条另按铁律 5**：先 `doh-hosts.sh --check`，
   形状按铁律 4 分超时与快速失败，`github.com` 不通而 `codeload.github.com` 通这种一半通的形状先想解析病，别顺着它那句"网络不通"往下写。
 - **别人的对比报告要"反着读"**：`docs/` 那两篇 REA 报告（DSHA vs woaiys3、官方壳 vs 社区壳）做法清单很长（第一篇 §6 就 66 条、条条带 `文件:行`），
@@ -219,6 +293,21 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
   **"钉了 awesome 通"不能外推到 `raw.githubusercontent.com`** —— `plugins.json` 是构建产物、从不提交进仓，那条 raw 路径按源码注释是 guaranteed 404。
 - **入口 `:3081` 对不带门禁口令的请求一律回 `404 Not Found`**（`dsh-entry.js:484-485`，设计如此，故意不像"没这个路由"）。
   ⇒ 判"插件路由挂没挂"要**直接打引擎 `:3080`**：`401 got=156B` = 挂着且要登录，`404` = 真没挂上。别拿 `:3081` 的 404 说"插件没加载"。
+  → **14.32 把这条补全成三个数，省得再当成故障**：`:3080` **裸打 = 401 / 68 B**（引擎活着、要券）；`:3081/` **不带口令 = 404 / 10 B**（按设计）；
+  `:3081/` **带口令 = 200 / 53,687 B**（这才是 App 点开那一发，注入层属性在里面复点得到）。口令从 stdin 递（`curl -K -`，铁律 8）。
+  p69 那发我就是因为只打了前两种，打出"看着像坏了"的两个读数，白花一发 p70 才问干净。
+- **`apt-get -s`（simulate）**从来**不打** `Need to get …` 与 `After this operation …` 那两行（apt 2.8.3/arm64 实测：rc=0、428 行、只有 `106:0 upgraded, 161 newly installed`）。
+  ⇒ 要"下多少 / 占多少盘"只能自己算：下载量 = `apt-get install --print-uris -qq` 每行**第 3 字段**（字节，URI 带单引号但文件名不带，别按空格切）；
+  占盘 = `apt-cache show <pkg>` 的 **`Installed-Size`**（单位 **KiB**，且**一个候选版本一条记录**，要去重）。
+  还有一条口径陷阱：**多批的包数不能相加当总量**（四批各量 348 / 182，真并集是 **281 / 159** —— `systemd`、`libpython3.12t64` 这类被几批同时拖进来）。
+- **`dsh` 没有"一次性跑一句"的 CLI 入口**（`--help` 只有 `--profile / --patch / --dump-config / --dump-default-config / --from-default-profile` 这类，**没有** `--command`/`--exec`）。
+  ⇒ 想端到端验上游函数（如 `confine()`）只有两条路：起真服务走 App，或者 `node --input-type=module -e "import(…)"` 自己 import 那个 `lib/index.js`
+  （14.32 用的是后者，探针 69 第 ③ 节；构造要真 ctx 时可以先不构造，直接拿 `prototype.<方法>.call(手搭的 this)` 只验那一个方法）。
+- **WebView 里键盘高度只能从原生拿，`adjustResize` 在沉浸式全屏下是废的**（壳 0.7，14.32 一）：`goFullscreen` 那句
+  `hide(systemBars()) + BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE` 让窗口不再为输入法让高度 ⇒ 键盘**盖**在 WebView 上，页面 `innerHeight` 一字不改（实测 360 不动）。
+  做法是 `root.setOnApplyWindowInsetsListener` 把 `in.getInsets(WindowInsets.Type.ime()).bottom` 压成 root 的下内边距（**只挂 API 30+**，`Type.ime()` 是 30 才有的）。
+  **量键盘只认真触摸**：`scripts/dsh-cdp.js --tapsel` 点输入框中心，然后 `dumpsys input_method | grep mInputShown` 确认 `true`；
+  用 `focus()` 唤出来的键盘**根本不出来**（`mInputShown=false`），那次的"页面没动"是**前提没成立**不是结论（我 14.32 第一版就栽在这，`downloads/kbd-212522/`）。
 
 - **工作区仓 `D:\mycode` 从来没有配过 remote**（2026-10-21 读数：`git remote -v` 回空，227 发提交全在本地）。
   ⇒ 别以为"提交"就等于"上传"；要上 GitHub 得走本目录这个嵌套仓。他账号 `zhl110` 下的库是**一项目一库**
@@ -234,6 +323,17 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
 - **父仓与工作仓双轨跟踪同一批文件**（`agent-hub` 早就是这个形状）：`D:\mycode` 里那些 `dsh-mobile/…` 条目**不会**因为
   本目录有了 `.git` 就消失，`git add dsh-mobile/AGENTS.md` 在父仓里照样能更新 blob。所以**每轮两边各提交一次**，
   父仓那次的 pathspec 必须带 `dsh-mobile/` 前缀（铁律 9）。
+- **`findmnt --target` 在这台 chroot 里判不了"只读"**（14.33 五，探针 72）：对 `/etc` 它回的是**底下那层 f2fs 的挂载选项**（看着像 rw 其实上层已冻），
+  对 `/phone` 一次回**两行**（`/dev/block/dm-74[/media/0] /phone`）。要判"写不写得进"只有真写一发再删（本轮没做，所以 14.33 那条只写"没用它下结论"）。
+- **会话记录里 `tool/call` 的 `data.arguments` 是一个 JSON *字符串*，不是对象**（14.33 二）：`jq '.data.arguments.command'` 回空、`node` 里 `obj.data.arguments.command` 也空，
+  必须先 `JSON.parse(data.arguments)`。这是"无关内容挤进我要数的字段"那一族的**第五种形状**（前四种：抓 schema 的 `description`、抓 `tool/result`、字段名撞车、数组当对象）。
+- **入口那条路只有一个位置**：部署件在 **`/usr/local/bin/dsh-entry.js`**（70,487 B、md5 `4af378c9…`＝仓库 `scripts/dsh-entry.js`），**不在 `/root/`**。
+  探针 71 第 ⑥ 节按 `/root/dsh-entry.js` 查 ⇒ 回"不在"。同理 `dsh-sandbox-local` 在 **`dsh/node_modules/@deepseek-ai/…` 底下那层**，不在包根同级；
+  **路径不存在造成的空读数不能读成"没有标记/没被改"**（71 因此有整节作废，72 才修好）。
+- **嵌套目录分组计数要先看深度**（14.33，探针 72 第 ⑦ 节）：会话是 `sessions/<组>/<session-id>/session.v4.jsonl.zstd` **多一层**，
+  我在组目录里 `ls */*.zstd` 数 ⇒ 三个组全回"会话数 0"，而同一发的逐文件列表读到了 21 份。**"逐分组计数"与"逐个文件列表"两个口径并存时以列表为准**。
+- **purge 的 shim 在每次引擎启动都跑一遍**（14.33，探针 74 第 ② 节）：`/tmp/dsh-purge-desktop.log` 尾部是 `[boot] enabled=true surface=web …`→`[home] home=/root/.dsh`→`[guard.wrap] …`，
+  当天 14:00 之后 201 行。判"purge 今天有没有被再应用一次"**别看这份日志的行数**，看**被改模块的 mtime**（仍 10:35:16）与 `.dshpurge.bak` 计数（仍 56）——两个都没动 ⇒ 没重应用。
 
 ## 不在这里写的东西
 

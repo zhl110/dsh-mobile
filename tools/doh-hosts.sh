@@ -27,16 +27,27 @@ LIST_PIN="
 api.deepseek.com platform.deepseek.com
 github.com codeload.github.com objects.githubusercontent.com
 registry.npmmirror.com cdn.npmmirror.com
-mirrors.tuna.tsinghua.edu.cn deb.debian.org
+mirrors.tuna.tsinghua.edu.cn pypi.tuna.tsinghua.edu.cn deb.debian.org
 hf-mirror.com www.modelscope.cn modelscope.cn gitee.com mirrors.aliyun.com
 awesome-dsh-plugin.com
 "
+# pypi.tuna.tsinghua.edu.cn 是 2026-10-21 晚上加的第二条（探针 54 读数 downloads/p54.txt）：
+# 那发把 pip 的 index-url 指到清华 pypi 镜像之后，`pip download requests` 仍回
+# "Could not find a version … (from versions: none)" —— 不是镜像坏，是**这个域名没钉过**：
+# hosts 里计数 0、getent 空，而这台机 UDP 53 是废的（本文件头部第 5 行）。同一台 tuna 的 apt 那条
+# （mirrors.tuna.tsinghua.edu.cn）一直通，所以这是同一类病：**装得上工具，域名没钉就等于没工具**。
+# 加进 PIN 而不是 WATCH：--sync 之后当场用 `pip download` 验落字节，通则留、不通就 --revert 退回。
 # awesome-dsh-plugin.com 是 2026-10-21 晚上加进来的（探针 43 第 4 节实测，读数 downloads/p43.txt）：
 # dshmarket 那份插件目录 plugins.json 就挂在这个域名上，它拿 DoH 给的 GitHub Pages IP（185.199.108–111.153）
 # 绕开解析直连是**通的**：code=200、connect 0.110 s、ttfb 0.388 s、正文 4,072,995 B。
 # 注意它和 LIST_WATCH 里那台 raw.githubusercontent.com（185.199.108.133，0.118 秒直接失败）不是同一回事：
 # 同一段 Pages IP 池，一个连得上一个连不上 ⇒ 这条只能算"这个 host 实测通"，不要外推成"Pages 都能通"。
-LIST_WATCH="raw.githubusercontent.com registry.npmjs.org ports.ubuntu.com archive.ubuntu.com security.ubuntu.com cdn.jsdelivr.net"
+LIST_WATCH="raw.githubusercontent.com registry.npmjs.org ports.ubuntu.com archive.ubuntu.com security.ubuntu.com cdn.jsdelivr.net gh-proxy.com"
+# gh-proxy.com 是 2026-10-21 深夜加进 WATCH 那摞的（探针 60，downloads/p60.txt 第 1、2 节）：
+# 文档里一直写"GitHub 被拦就改走 gh-proxy"，今晚第一次在手机上试这条路 —— DoH 能给 8 个 Cloudflare IP
+# （104.18.x / 172.64.x，Status=0），但拿首选 IP 直连 TLS **被对端重置**：curl (35) Recv failure: Connection reset by peer
+# （robots / raw / tarball 三发都是这同一条错误，connect 0.1–1.2 s 就断）。⇒ 钉进 hosts 只会把"解析不到"变成"握手被重置"，
+# 更难查，所以归 WATCH 不归 PIN。**这条是今晚的读数，不是永久判决**：换个时间要重测（同一发里 github.com 也是死的）。
 LIST_DEFAULT="$LIST_PIN $LIST_WATCH"
 DOH=https://223.5.5.5/resolve
 MODE=${1:---check}

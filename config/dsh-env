@@ -28,6 +28,27 @@
 #   本文件只负责 DSH_PERMISSION_MODE 与 DSH_UNSHARE_RUN_ALLOW_NO_PIDNS（runner 继承服务 env）。
 export DSH_PERMISSION_MODE=workspace-write
 
+# → 2026-10-21 深夜接线时读回来的两处纠正（旧话留着不删）：
+#   ① 上面那句"接线形状两行写在 profiles/web/cordis.patch.yml 里"是对的，但 RUNBOOK-archived.md:878 那段
+#      示例把两行挂在 `- id: sandbox-policy` 底下 —— **那个位置会被静默丢掉**：runnerCommand 归
+#      dsh-sandbox-local，而上游 base 那份 cordis 里 id 分工是实测读回的（探针 67 第 ③ 节）：
+#        `- id: sandbox` = @deepseek-ai/dsh-sandbox-local（吃 runnerCommand / runnerFailureSignatures）
+#        `- id: sandbox-policy` = @deepseek-ai/dsh-sandbox-policy（只吃 mode / workspaceRoot）
+#      且这两个包的 zod Config 都不设 strict（同节：strict( 命中 0）⇒ 键放错 id 不报错、直接被剥掉，
+#      于是"接了线其实没接"。所以真接的位置是 `- id: sandbox`，接完用 `dsh --profile web --dump-config`
+#      在**不重启**的前提下验组合结果（探针 68 第 ③ 节：runnerCommand 命中 1 行、就在 id: sandbox 底下）。
+#      顺带把上游那行默认值也读准了：`mode: !!js process.env.DSH_PERMISSION_MODE ?? 'danger-full-access'`
+#      —— 不是我注释里原先写的 `?? 'workspace-write'`（那是 0.2.1-alpha 的形状）。这台机现在靠本文件
+#      这一行把它钉成 workspace-write，所以默认值是多少不影响我们，但下次读代码别再照抄旧的那句。
+#   ② 下面这条降级开关：这台内核 `# CONFIG_PID_NS is not set`，runner 拿不到 pid namespace 时**默认 127 拒绝执行**
+#      （宁可整档不可用，也不静默少围一层）。设成 1 就是机主显式接受这一条后果：**被围命令能看见宿主的 pid
+#      并可 kill 它（含 dsh 自己）**；文件系统的只读围堵不受影响（34 PASS/0 FAIL 那批判据量的是文件那一半）。
+#      另一头对照的是：不设这条 ⇒ Bash 在他手机上直接不可用（档位是 workspace-write，而引擎 21363 的 env 里
+#      这个变量计数 = 0，探针 67 第 ④ 节读数）。2026-10-21 他一句"重启引擎和入口没关系的，直接重启测试就行了"
+#      之后我按这个方向设了，判断依据是"降级的那一半比现状（完全没围的 danger-full-access 或干脆没 Bash）窄"。
+#      不认的话撤法一条：删掉本行（或改成 0），再重启一次引擎；runner 就回到 127 响亮拒绝的形状。
+export DSH_UNSHARE_RUN_ALLOW_NO_PIDNS=1
+
 # 插件市场（dshmarket）的下载源导到 npmmirror —— 2026-10-21 晚上为修「市场一直显示正在加载插件目录」加的
 # （成因与三条实测读数在 RUNBOOK 当天那节，探针 42/43，读数 downloads/p42.txt 与 p43.txt）。
 # 为什么加这一行：插件自己那次测速只量 npm 官方源与腾讯镜像，这两家当时都不在 hosts 钉表里 ⇒ 双双超时 ⇒

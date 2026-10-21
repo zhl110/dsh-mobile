@@ -1,0 +1,50 @@
+# 沙箱 runner 接线（备而不装）—— 2026-10-21 晚接过一次，量完发现**在 purge 在位时是死配置**，已逐字节撤掉。
+#
+# 这是什么：把 `@deepseek-ai/dsh-sandbox-local` 的官方口子 `runnerCommand` 指向我们自己那个
+# mount-namespace runner（仓库件 `tools/dsh-unshare-run.sh`，机上 `/usr/local/bin/dsh-unshare-run`
+# 9,530 B、sha256 `50788b296b118892…`、14.11 设备上验收 34 PASS / 0 FAIL）。
+#
+# 为什么现在不装（这一条是本轮最贵的读数，全文见 RUNBOOK 14.32 三）：
+#   这台机的 web profile 里装着 **dsh-purge**（今天北京 18:35 打进上游 42 个文件）。
+#   它把 `confine()` 换成了"永不包装 argv"：
+#     confine(argv) → { argv: [...argv], enforcement: "full", denialSignatures: [], runnerFailureRules: [] }
+#   ⇒ 装了这两行也不会有任何东西去调 `selectRunner`，**配置在、生效为 0**。
+#   要围堵先撤 purge；只撤 purge 不接 runner，则回到"workspace-write 下 Bash 抛 SANDBOX_UNAVAILABLE"那个旧形状。
+#
+# 装法（两行半，别改缩进；`- id` 必须是 **sandbox**）：
+#   1) 先备份并比 sha256，撞上了才动盘：
+#        cp -p /root/.dsh/profiles/web/cordis.patch.yml /root/.dsh/cordis.patch.yml.bak.$(date -u +%Y%m%d-%H%M%S)
+#   2) 把本文件下面那段**整段追加**到 `/root/.dsh/profiles/web/cordis.patch.yml` 末尾（那是个顶层 YAML 数组）；
+#   3) **不用重启就能验接对没接对**：`dsh --profile web --dump-config` 里 `runnerCommand` 命中应为 1
+#      （命中 0 ＝ 键放错了 id、被 zod 静默丢掉，见下面那条陷阱）；
+#   4) 重启引擎生效（只 SIGTERM `dsh web`，别动入口；判据与换代验法照 `scripts/dsh-engine-restart-and-verify44.sh`）；
+#   5) 端到端自测件在 `scripts/dsh-wire-restart-probe69.sh` 第 ③ 节（拿上游自己算出来的 argv 去跑四条判据）。
+#
+# 配套的另一半在 `config/dsh-env`：`export DSH_UNSHARE_RUN_ALLOW_NO_PIDNS=1`（已部署到机上 /root/.dsh-env）。
+#   这台内核 `# CONFIG_PID_NS is not set` ⇒ 不加这行 runner 直接拒跑；加了以后被围命令**能看见宿主 pid 并可 kill 它**（含 dsh 自己）。
+#   撤这一行＝退回"runner 拒绝降级运行"，代价是 Bash 一条都跑不了。
+#
+# 陷阱（为什么写在 sandbox 而不是 sandbox-policy）：
+#   上游 base 那份 cordis 把 id 分得很死 —— `- id: sandbox` = `@deepseek-ai/dsh-sandbox-local`（吃 runnerCommand），
+#   `- id: sandbox-policy` = `@deepseek-ai/dsh-sandbox-policy`（只吃 mode / workspaceRoot）。
+#   两个包的 zod Config 都**没有 .strict()**（探针 67 第 ③ 节：`strict(` 命中 0）⇒ 键放错 id 底下**不报错、静默丢掉**。
+#   `RUNBOOK-archived.md:878`（14.11）那段示例就放在 sandbox-policy 底下，那个形状接了等于没接，已在 14.32 就地改口。
+#
+# 撤法（本轮就是这么撤的，p70 第 ③ 节复点逐字节相同）：
+#   cp -p /root/.dsh/cordis.patch.yml.bak.20261021-140720 /root/.dsh/profiles/web/cordis.patch.yml
+#   复点：原件 508 B sha256 `29d79784b8ee48ed…`；接线后 1,063 B；撤后回到 508 B、`runnerCommand` 命中文件与树里都是 0。
+#
+# → 10-21 深夜（北京 22:43）**手机里那个 dsh 自己把这两行接回去了**：机上现在 **1,627 B / 29 行 / 命中 4**（它那半＝第 14–24 行的 11 行注释 + 第 25–29 行那段，备份名 `cordis.patch.yml.bak-20261021-144328`、
+#   sha 与我上面那份撤后原件逐字节相同）。**生效仍为 0**（同一个 confine() 直通的原因，见上面"为什么现在不装"）；它注释里那句"`confine()` 走 :311 那条分支"读的是
+#   `dsh-purge/host-backups/9dac90ce22cf7f551f319a5e.bak` 那份**原件**，不是真在加载的那份（AGENTS.md 铁律 17）。我没去动它写的东西，撤/留等他一句。全文 RUNBOOK 14.33 三。
+#
+# --- 以下为要追加的那段原文 ---
+#
+# dsh-mobile 接线（2026-10-21）：这台内核 USER_NS/LANDLOCK 都没有 ⇒ 上游两条内置后端起不来，
+# workspace-write 下 Bash 明确拒绝执行。用官方 runnerCommand 口子把我们自己的
+# mount-namespace runner 接进来（id 必须是 sandbox = @deepseek-ai/dsh-sandbox-local；
+# 放到 sandbox-policy 底下会被 zod 静默丢掉）。runner 未验前先降级可见：见 /root/.dsh-env。
+- id: sandbox
+  config:
+    runnerCommand: ["/usr/local/bin/dsh-unshare-run"]
+    runnerFailureSignatures: ["dsh-unshare-run: "]
