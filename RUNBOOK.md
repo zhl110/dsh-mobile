@@ -25,6 +25,15 @@
 | key | **他自己填好了**（`/root/.dsh/.credentials.yaml` 478 B，0600 明文）。日志侧证：`model listing from https://api.deepseek.com/models loaded 2 model(s)`，且真回话了 |
 | 沙箱 | 这台内核 `# CONFIG_USER_NS is not set` + `# CONFIG_SECURITY_LANDLOCK is not set` ⇒ **`workspace-write` 下 Bash 全灭**（原生 read/glob/edit 不受影响，实测 `glob` 返回 17,056 B）。bwrap 0.9.0 照装照验，装不上不怪它。第 14.4 节 |
 
+**→ 2026-10-21 凌晨按最新一轮更新这张表（读这张表的人先看这一段）**：现在交付的不是"Termux 控制台 + 16 MB 原生客户端"
+这一个形状，是**三层** —— 壳 App `com.zhl.dsh` **0.6**（桌面图标、自己的窗口、进 App 自动全屏、返回键自消散提示、
+麦克风授权链、不改写方向）→ 常驻入口 `:3081`（[scripts/dsh-entry.js](scripts/dsh-entry.js)，管"token 换 30 天 cookie"
+与兼容层在出口内联）→ 引擎 `:3080`。Termux 控制台与那个 16 MB 客户端都还在，是**对照与退路**，不是主路径；14.15–14.19 是这三层的成形过程。
+另外两件这张表里还没有的：语音**真能出字**了（模型 241,357,257 B 在位，4.24 秒合成音在手机上识别 0.10 秒，14.21）；
+手机侧多了 [tools/doh-hosts.sh](tools/doh-hosts.sh)（用阿里 DoH 补 hosts —— 这台机的病根是 **UDP 53 废**，不是出口不通，14.22）。
+下面"还差的只有一件"那句（填 key）已经在 PROGRESS 状态 4 里结掉；现在**只能他自己做**的剩两件：
+在 App 里把语音插件关掉再打开、真人录一句；以及「添加工作区 → 选择工作区目录」里点一下「手机存储」那一行。
+
 还差的**只有一件**：~~把你自己的 `DEEPSEEK_API_KEY` 填进去~~ —— **他 2026-10-20 凌晨自己填完了**，
 模型列表 2 条、真回合 250 tok/s，第 4 条验收（"key 对了能回话"）到此才算真过。
 第 5 节那条 `/root/.dsh-env` 的路留着当兜底，想清掉用 `scripts/dsh-clear-key.sh`。
