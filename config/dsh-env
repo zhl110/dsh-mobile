@@ -14,10 +14,41 @@
 # 写错值不静默：dsh-sandbox-policy 在插件加载时校验，档位非法会直接报错起不来。
 #
 # 本机现状（2026-10-20 读数）：内核 CONFIG_USER_NS 与 CONFIG_SECURITY_LANDLOCK 都是 not set，
-# 上游 0.2.1-rc.2 没有 android 平台链、也没有 proot/自定 runner 的配置位，所以 workspace-write
-# 下 bash 类工具会明确拒绝执行（原生文件工具不受影响）。要用 bash 只能显式改成 danger-full-access，
+# 上游 0.2.1-rc.2 没有 android 平台链，所以 bwrap 与 Landlock 这两条**内置**后端在这台机上都不成立，
+# workspace-write 下 bash 类工具会明确拒绝执行（原生文件工具不受影响）。要用 bash 只能显式改成 danger-full-access，
 # 那一改等于关掉进程沙箱 + 审批变 never，属于扩大暴露面，需机主自己点头。
+#
+# → 2026-10-21 改口（原话留着不删）：上面那句"没有自定 runner 的配置位"**是错的**，当天读上游源码读翻了 ——
+#   `@deepseek-ai/dsh-sandbox-local` 的 Config 里有 `runnerCommand`（`reference/dsh-sandbox-local-index.js:254`），
+#   只要它非空就直接拿它围堵并标 `enforcement: "full"`（`:311-321`，**不探测、不验证**）。
+#   我们据此做了说 bwrap 方言的 unshare runner，设备上验收 34 PASS / 0 FAIL（RUNBOOK 14.11）。
+#   所以今天的准确说法是：**配置位有、runner 也在机上，只差这一档没接线**（接线要重启引擎，代价与判据见 14.11 四·2 与 14.25 一·1）。
+#   接线形状两行，写在 profiles/web/cordis.patch.yml 里，不是写在本文件：
+#     runnerCommand: ["/usr/local/bin/dsh-unshare-run"] / runnerFailureSignatures: ["dsh-unshare-run: "]
+#   本文件只负责 DSH_PERMISSION_MODE 与 DSH_UNSHARE_RUN_ALLOW_NO_PIDNS（runner 继承服务 env）。
 export DSH_PERMISSION_MODE=workspace-write
+
+# 插件市场（dshmarket）的下载源导到 npmmirror —— 2026-10-21 晚上为修「市场一直显示正在加载插件目录」加的
+# （成因与三条实测读数在 RUNBOOK 当天那节，探针 42/43，读数 downloads/p42.txt 与 p43.txt）。
+# 为什么加这一行：插件自己那次测速只量 npm 官方源与腾讯镜像，这两家当时都不在 hosts 钉表里 ⇒ 双双超时 ⇒
+# 它按默认判成 global 区并写死进 profiles/web/.dsh-market/state.json，而 global 区取目录只走
+# awesome-dsh-plugin.com 与 registry.npmjs.org 这两扇 —— 也都是没钉的，每扇等约 9.8 秒才失败，四次共 42 秒，
+# 屏幕上那句「正在加载插件目录…」就是这 42 秒。路由本身是活的（:3080/dsh-market/* 回 401 不是 404）。
+# 这一行做什么：dshmarket 的 regions.js:233 用 DSHM_NPM_MIRROR 覆盖 npmRegistry，而 catalogSourcesFor()
+# 会把"目录那个 npm 包"补一条挂到**同一个已解析通的 registry** 上 ⇒ 插件多一条走得通的取数路。
+# 机上实测（探针 43 第 1–2 节）：registry.npmmirror.com/dsh-plugin-catalog/latest 元数据 0.185 s 回 200，
+# 版本 2026.1021.8781，整包 2,582,974 B 在 1.53 s 下完（约 1.68 MB/s），且 tarball 那个 host 本来就在钉表里。
+# 生效条件：这一行要**引擎重启**才吃进去（入口那条 engineCmd 是 `. /root/.dsh-env; exec dsh web`，
+# scripts/dsh-entry.js:70 —— 所以杀引擎 pid、让入口按监管逻辑重拉一次就够了，不用动入口）。
+# 还剩一条不归我：区已经写死成 global，插件源码明说"选定即持久、不再重测"（routes.js:510 附近），
+# 所以想让它先走这条省流量的路（2.58 MB 且按版本号缓存，一天一回），要他在市场设置里把「下载区域」
+# 点成「中国大陆」——china 区的源序是 npm 在前、awesome 的 URL 在后。不点也能用，只是每开一次现下 4 MB。
+# → **同日 19:0x 补（他一句"两个都弄，当场重启"之后做掉的两件）**：① `tools/doh-hosts.sh` 的钉名单已加
+#   `awesome-dsh-plugin.com`（→185.199.108.153，所以 global 区**第一源**现在解析得开了，上面那句"两扇都没钉"是改之前的形状）；
+#   ② 这一行已随本文件推到机上 —— 用**新写的 `tools/deploy-env.sh`**（`--check` / 写 / `--revert`，备份逐字节撞 sha256 才动盘），
+#   并当场只 SIGTERM 引擎让入口重拉换代（读数 downloads/p44.txt：新引擎 `/proc/<pid>/environ` 里 `DSHM_` 计数 = 1、不带 `--resolve` 的 HEAD 已回 200）。
+#   **顺带查出来**：这文件在机上一直是 10-20 那发 1,687 B，14.25 改的模板从没推上去过 ⇒ 以后改完本文件都要跑一次 `--check` 对一对。
+export DSHM_NPM_MIRROR=https://registry.npmmirror.com
 
 # DeepSeek key 如果以后改用 API key 而不是账号登录，写在这里（不要把值贴进聊天）：
 # export DEEPSEEK_API_KEY=...

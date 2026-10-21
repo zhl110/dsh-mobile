@@ -34,6 +34,11 @@
 下面"还差的只有一件"那句（填 key）已经在 PROGRESS 状态 4 里结掉；现在**只能他自己做**的剩两件：
 在 App 里把语音插件关掉再打开、真人录一句；以及「添加工作区 → 选择工作区目录」里点一下「手机存储」那一行。
 
+**→ 2026-10-21 晚又动了三件这张表里没有的（细节与读数只在 14.28，这里只给形状）**：引擎已换代到**第 4 代**（北京 19:08，pid 14851⇒21363，只 SIGTERM 引擎、入口没动、cookie 自动重换）；
+`/root/.dsh-env` 从 1,687 B 换成仓库那发 **4,738 B**（多了 `DSHM_NPM_MIRROR`，这台机子上这文件第一次有了部署器 `tools/deploy-env.sh`）；
+`/etc/hosts` 钉名单多了 `awesome-dsh-plugin.com` —— 这两处合起来治的是**插件市场一直转圈**（根因＝区早已定成 global ＋ 目录那两个 host 一条都没钉，见 14.22 那个解析病的复发）。
+**这一格还没验收完**：要他在 App 里打开市场页才算，读数当时 `log.ndjson` 仍停在 18:40:50（换代后没人请求过目录）。
+
 还差的**只有一件**：~~把你自己的 `DEEPSEEK_API_KEY` 填进去~~ —— **他 2026-10-20 凌晨自己填完了**，
 模型列表 2 条、真回合 250 tok/s，第 4 条验收（"key 对了能回话"）到此才算真过。
 第 5 节那条 `/root/.dsh-env` 的路留着当兜底，想清掉用 `scripts/dsh-clear-key.sh`。
@@ -345,6 +350,9 @@ scripts/dsh-model-probe.sh        只读：查 key 到底配在哪一层（这�
 scripts/dsh-key-probe.sh          只读：包内 apiKeyEnv/端点/hosts 取证
 scripts/dsh-token-probe.sh        只读：token 能否复用 + DSH_ 可调变量名单
 scripts/dsh-keychain-test.sh      哑 key 端到端取证 + env 有无 + 流量增量
+scripts/dsh-envclaim-probe33.sh  只读：把他那份《手机端情况.md》的每条断言在盘上复点一遍（/system 挂没挂、binder 类节点在不在、
+                                    user ns / mount ns / Landlock 三条分开量、runner 在不在位、cordis 里接没接线、自述那 6 个失败域名各 30 秒窗不带 --resolve、
+                                    `apt-get -s` 三档模拟把"要下多少 MB / 新增几个包"从推断变成读数、/phone 暴露面只数不列内容）。见 14.25
 tools/pin-hosts.py                PC 侧 DoH 解析 → 刷 chroot 的 /etc/hosts 钉 IP 段
 scripts/dsh-webconnect-probe.sh   只读：三件事一次取齐（服务 cwd / 手机存储进没进 chroot / 凭据库有没有 key 槽）
 scripts/dsh-fetch-probe.js        只读：用 node 自己打 auth_init，把"网络不通"和"服务端报错"分开（13.2 的读数出自它）
@@ -377,7 +385,19 @@ tools/decomp-session.js           只读：把 session.v4.jsonl.zstd 逐帧解�
 tools/dump-record.js              只读：按行号把某几条会话记录原样打出来（看 approval/decided 这种关键行）
 app/                              我自己那个 77 KB WebView 壳：AndroidManifest + MainActivity + res + build.sh，见 14.6，**没装到手机上**
 app/local/                        含活 token 的 url.txt 与自签 keystore —— 整目录不入库
+手机端情况.md                    **他给的一份输入，不是我写的**：2026-10-21 他让手机上的 dsh 自己总结"这台机上什么干得了、什么干不了"，原样存进来。
+                                    逐条对表在 14.25，复点工具是 scripts/dsh-envclaim-probe33.sh —— **里面的断言一律当"待复点的假设"用，不当读数**
 downloads/dshm-*.png              原生客户端这一路的屏证（登录态、工作区目录页、权限片读数）
+scripts/dsh-plugins-probe32.sh    只读：把插件装进手机**之前**的前置体检（node/npm/pnpm/dsh 在不在、profile 名单与 `web` 那层的现状、`dsh plugin --profile web list`、npmmirror 两个出口各落 2 KB 的字节数、空间与 3080/3081 进程、purge/market 的历史痕迹）。走 `bash tools/run-probe.sh scripts/dsh-plugins-probe32.sh downloads/p32.txt`
+tools/install-phone-plugins.sh    把 dsh-purge / dshmarket 两发 tarball 推(chroot)/装(profile `web`)的写操作脚本：`--check` 一个字节不写（本地清单 + 设备数 + chroot 有没有 pnpm），真装时三计数按死（清单 2 / 推上去 2 / sha256 撞上 2，不等就停），装完只复测、不点「应用」，回滚命令打在末尾，读数全文落 `downloads/plugin-install-<时间戳>.txt`。见 14.24 末节；**14.27 已用它真装过一次（2/2/2），并就地改了它两处**：`:80-87` 补 `cygpath -w`（adb.exe 看不见 git-bash 路径，第一发就是崩在这儿被自己的闸门拦下的）与显式看 push rc，第 5/6 节去掉 `$( )`（三层引号下会被 `/system/bin/sh` 求值 ⇒ 假空值假 0）并把"要重启"改成"这台不用重启就接住了"
+scripts/dsh-plugins-verify34.sh   只读：install 脚本那两个假读数的可信重取（bundles 计数 / `node_modules` 条目 / 两发 tarball 的 sha256 / `dsh plugin list` 用 `PIPESTATUS` 取 rc）→ 14.27 第一节
+scripts/dsh-marketdir-probe35.sh  只读：`.plugin-manager` 与 `.dsh-market` 是谁生的（逐个文件的出生时刻 + 小文件全文）
+scripts/dsh-plugin-loaded-probe36.sh  只读为主：引擎 fd1/2 接到哪、它的 inotify 监视表、`dsh --profile web --dump-config` 的层栈。**例外要记住：`--dump-config` 会重写 `profiles/web/cordis.yml`**（14.27 四·5）
+scripts/dsh-plugin-loaded-probe37.sh  只读：inode 十六进制撞回（修 36 的假阴性）、`applied.json` 在不在、`entry.out` 有没有新行、引擎与入口的 `PATH`
+scripts/dsh-inode-and-pnpm-probe38.sh  只读：认出第 5 个被监视的 inode 是 `.credentials.yaml`；`pnpm` 是 `/usr/local/lib/node_modules/pnpm/pnpm` 那个 ELF 的符号链接；App 插件页今早那次 `spawn pnpm ENOENT` 的三条 operation 现场
+tools/install-apk.sh              不重打、只装：`--verify` 只比指纹；真装走 push→`wc -c`+sha 三计数→`su cp` 进 `/data`→`restorecon`→`pm install -r`→装完复读 `base.apk` 的 sha 与 versionName（`adb install -r` 在这台是 -99 那条，见 14.23）
+scripts/dsh-traffic-and-cleanup-probe39.sh  只读收尾：`/proc/net/dev` 两拍相隔 45 秒算逐接口增量（awk 算，不口算）、`lo` 上那 82 KB 的连接数、引擎与入口的出生（按 `stat` 第 22 字段 + `/proc/stat` 的 `btime`）、`/root/.dsh` 60 秒内有没有被写、我自己留在机上的文件分类、体积现值。**第一发（`p39.txt`）里我自己有四处列号/字段用错，就地修好重跑的第二发是 `p40.txt`，坑写在 14.27 八**（原读数留着当证据，别删）
+scripts/dsh-phone-visibility-probe40.sh     只读：把"/phone 顶层到底多少个条目"这件事的三种视图一次取全（本 shell / 引擎 17637 / 入口 17611 各自的 `mountinfo` 与 `/proc/<pid>/root/phone` 两种计数口径 + 引擎的 `cwd` 与 `PWD`）。起因是今晚同一件事出现三个数，对账结论在 **14.27 九**，读数 `downloads/p41.txt`
 ```
 
 `scripts/dsh-model-probe.sh`、`dsh-key-probe.sh`、`dsh-token-probe.sh`、`dsh-keychain-test.sh`
@@ -894,7 +914,11 @@ pid namespace     没授权降级 → unshare: Invalid argument, RC=1（响亮�
    "已知缺口 + 有一条待验的修法"，不是"已解决"。
 2. **没接线**：`profiles/web/cordis.patch.yml` 里还**没有** `runnerCommand`。接线上要重启服务，
    而重启会换 token（`dsh.log` 里数得出四条不同 token），他手机里那条入场链接会失效 —— 这代价得他挑时间，
-   我不自己按。接线要配的两行形状（配错了会在构造期 throw，不是静默降级）：
+   我不自己按。**→ 2026-10-21 这条代价要收窄**（写 14.25 时对着 `scripts/dsh-entry.js` 复点得出来的）：
+   "重启 ⇒ 入场链接失效"是 **`--entry` 之前**的形状。现在常驻入口自己认新一代启动行并重换 cookie
+   （`:192-193` 认行 → `:196-213` 交换 → `:465-474` 上游回 401 就重换、没 token 就重拉引擎，`:174` 挂了按 backoff 重拉），
+   而壳里种的是不含 token 的 base URL ⇒ **引擎重启不再打断他那条链接**，真实代价只剩"重启窗口里正在跑的会话断掉 + 换代那几秒页面要等"。
+   接线前的复点项在探针 33 第 3 节（runner 在不在位、cordis 里有没有 runnerCommand）。接线要配的两行形状（配错了会在构造期 throw，不是静默降级）：
    ```yaml
    - id: sandbox-policy
      config:
@@ -1236,6 +1260,11 @@ manifest 另加 `enableOnBackInvokedCallback="false"`。**这一条要老实标�
   体积撞巧一样、内容不同 —— 所以**认版本只认 sha 和 `dumpsys` 的 versionName，别拿字节数当版本**。
 - 入口：`chroot:/usr/local/bin/dsh-entry.js` **64,791 B**（本地逐字节相同），机上跑交付物自身
   `--selftest` **59 条判据 PASS 59 / FAIL 0**，Windows 侧同一份也 59/59。
+  → **这一串现在过时了**：入口在这之后又改过（本地那份 10-20 21:25 起是 70,487 B，机上当时是 64,791 B），
+  2026-10-21 我在 Windows 侧对**仓库这一份**重跑了一遍，脚本打的合计行是 **`合计 58 条：PASS 58 / FAIL 0`**。
+  为什么现在才补这一句：这正是 14.26 从两份 REA 报告里捡回来的那条自家毛病 —— **文档里抄的"自己上一次的计数"会被下一个读文件的人当事实**，
+  而它只要过一次改动就不作数了。判据数在 14.17 前后是 57→58，本节当时写的 59 是另一支未合并的形状（**没查清，别再引它**）。
+  往后这条的口径：**要引用判据数就当场重跑 `node scripts/dsh-entry.js --selftest`，只抄脚本打的"合计"行**（已写成铁律 12）。
 
 **这轮真做过一次的"停 → 再起"循环，顺带抓到自家一条假警报**
 
@@ -1977,3 +2006,678 @@ chroot `/root` 里的 `.sh` 从 7 份变 **8 份** ——
 "22–26 KB/s 能不能撑住一次真 clone"没验）；没找到国内直给同 sha 权重的镜像（ModelScope 只试了三个猜名，全 404）；
 `--check` 没做成定时或开机自动跑（IP 会漂，**钉过的条会悄悄地坏**，这条得周期性对账）；③ 里那个候选计数改完没实测；
 App 上那两步（语音插件关再开、目录选择器点「手机存储」）仍然没替他点。
+
+### 14.23 他嫌图标不好看、自己放了三张进来：换掉的是"带白角"这件事（2026-10-21 早上）
+
+他原话是"你做的那个桌面端 APP 的图标做的不怎么好看，我又自己做了几个比较满意的，放到 icon 目录里了，你看一下"。
+先量货，不先夸：`app/icon/` 下三张新图**全是 2048×2048** —— `1792543659137.png` 3,961,128 B（蓝发小女孩抱鲸鱼，**满幅**）、
+`share_1792543567542.png` 3,823,912 B（同一张画，导出成圆角方 + 白底）、`share_1792543661221.png` 3,309,864 B
+（另一张：深蓝鲸鱼剪影 + 女孩侧影，同样圆角方 + 白底）。旧 `icon-src.png` 1024×1024 / 711,195 B。
+
+*角像素*（`Add-Type -AssemblyName System.Drawing` 之后 `Bitmap.GetPixel` 读；**直接 `New-Object System.Drawing.Bitmap` 会报
+"找不到类型 System.Drawing.Bitmap"** —— 那条错我撞了，是这套 PowerShell 不自动载程序集）：
+旧图四角 RGB **250–252**、两张圆角方导出四角纯 **255,255,255**、满幅那张四角 `A=255 RGB 11,36,90 / 16,37,90 / 69,148,227 / 66,150,223`。
+⇒ **桌面上那四个白角不是启动器加的，是图里烤进去的**；而 Android 的启动器会照自己的形状再裁一刀，
+所以喂进去的必须是**满幅方图**，不要喂带白底的圆角导出 —— 这条以后换图标都适用。
+
+*那两张白底的怎么办*：写了 `app/tools/SquareIcon.java`（只用 JDK）—— 从边界漫填"亮"像素圈出底板、往里吃 3 px 抗锯齿、
+再从相邻的**暗**像素用 BFS 把颜色灌进去。**错了两次**，都留在注释里：
+第一版没有亮度下限 ⇒ 灌色从抗锯齿那圈近白像素起头，补出来 `237,240,247`（浅灰）；第二版把下限设 150 ⇒ 还是 `124–146` 的灰，
+而且"另吃掉抗锯齿：0"（吃边那步只认 ≥170 的像素，那圈灰根本进不来）。第三版 `DARK=100` + 无条件内扩 3 圈，
+补完剪影那张四角 `10,21,49 / 11,22,52 / 24,30,54 / 35,46,76` —— 数值进了深蓝区，**但 1024 和 192 下都看得见一圈很淡的圆角接缝**：
+灌进去的颜色取自边界内侧几像素，和原图那层径向渐变对不齐，现在这个做法消不掉。
+
+*选哪张*：满幅那张 **A**（`1792543659137.png`）。理由是可复现的：不用补角 ⇒ 没有接缝；48 px 缩下去蓝发与鲸鱼还认得出；
+剪影那张 C 在小尺寸下女孩和背景糊成一块，再加那圈接缝。三张 192 预览留在 `downloads/icon-preview/`（`old-192.png` / `A-192.png` / `C-192.png`）。
+**如果他要 C**：别再用现在这套灌色，改成按四边像素拟合一层渐变往外推，再缩 48 px 看接缝。
+
+*落地与验收*：`cp` 成 `app/icon/icon-src.png`（sha256 `7b0ab834…`；旧图没删，`git show HEAD:./app/icon/icon-src.png` 可取回）、
+`sh app/icon.sh` 出五档 5,971 / 12,319 / 20,965 / 43,477 / 74,897 B、`bash app/build.sh` 出 **152,167 B、sha256 `17c280ac48…cb`**。
+**包里那五张不是源图字节**：aapt2 重压过（4,501 / 9,533 / 16,034 / 33,745 / 56,997 B），比文件 sha 会得出"没换"的假结论；
+所以写了 `downloads/icon-check/ComparePng.java`（临时件，`downloads/` 不入库）把五张从包里解出来逐像素比 `app/res/` —— **五档全 `SAME`**。
+版本号没动（0.6 / code 6）。**没做的**：没装机（手机不在这台电脑上）、没提交、没做 adaptive icon / 主题图标、没动正在跑的三层。
+
+### 14.24 他接着要 dsh-market：包名不叫 dsh-market，装的是 npm 上那发 `dshmarket`（2026-10-21 午后）
+
+**先解决"是哪一个"**（同名会装错，所以这一步不能靠记忆）：
+
+```sh
+curl -s --ssl-no-revoke "https://api.github.com/search/repositories?q=dsh-market&sort=stars&per_page=20"
+```
+
+回 284 个仓。同名两家、形状完全不同：`dsh-market/dsh-market` **7,811 星 / MIT / TypeScript / homepage `dshmarket.com` / 100 个标签最高 `v1.66.45` / size 19,977 KB**；
+`2BingLing/dsh-market` 162 星 / license `NOASSERTION` / homepage `dsh.market` / **0 个标签** / size 150,843 KB。**选前者**。
+旁边还有一串同类（`dsh-skin-market` 232、`DSH-Plugins-Marketplace` 184、`dsh-prompt-market` 106…），都不是他要的那件，但说明**这个坑名很挤，报版本必须带仓全名 + tag**。
+
+**包名这条要单独记**：npmmirror 上 `dsh-market` 回 `NOT_FOUND`，真包名是 **`dshmarket`**（`https://registry.npmmirror.com/dshmarket`：184 个版本、`dist-tags.latest = 1.66.45`、维护者 `fkysly`、首发 2026-08-14、末版 10-20 17:40）。
+GitHub 那边 `package.json` 也叫 `dshmarket`，而它往层栈里插的 id 是 `dsh-market`（`cordis.patch.yml` 125 B：`insert: - id: dsh-market / name: dshmarket`）⇒ **三个名字一件事用**，
+`dsh plugin list` 里看到的会是包名，设置页里看到的是市场。
+
+**取件与三方对齐**（"下下来的就是官方那发"只能靠字节，不能靠"看着像"）：
+
+```sh
+curl -sS -L "https://registry.npmmirror.com/dshmarket/-/dshmarket-1.66.45.tgz" -o dshmarket-1.66.45.tgz
+python - <<'PY'   # sha512 → base64 对 registry 的 integrity；sha1 对 shasum；解包字节对 unpackedSize
+PY
+```
+
+读数：tarball **1,350,488 B**；sha512 base64 `lOOH13LZ…Vojtg==` **与 registry `integrity` 逐字符相同**；sha1 `f58d87e0ca29928df1278d1411fdbb50ad75c185` **= registry `shasum`**；
+`tar xz` 出来 **186 文件 / `du -sb` 4,893,393 B = registry `unpackedSize`**；sha256 `5267bdcdf66ab16d349d7481ca0ae4caff8393f61fa902fca25ff2b608627415`。
+**npmmirror 是 npm 的同步镜像，`shasum` 抄的是 npm 原值** ⇒ 三条同时相等才敢说"没被换包"。
+
+**装**（先备份，再走 CLI；`file:` 依赖会把路径写进配置，所以先落稳定位）：
+
+```sh
+cp ~/.dsh/profiles/desktop/package.json  <项目>/downloads/market-install/package.json.before
+cp ~/.dsh/profiles/desktop/pnpm-lock.yaml <项目>/downloads/market-install/pnpm-lock.yaml.before
+cp dshmarket-1.66.45.tgz /d/tools/dsh-plugins/
+powershell -NoProfile -Command "cd 'D:\program files\DeepSeek\resources\runtime\cli\bin'; .\dsh.cmd plugin --profile desktop add D:/tools/dsh-plugins/dshmarket-1.66.45.tgz 2>&1 | Out-String -Width 200; 'rc=' + \$LASTEXITCODE"
+```
+
+`Packages: +4 / downloaded 3 / Done in 1.5s / rc=0`。装后读数：`dependencies` 两条（purge + dshmarket）、`bundles` 四项含 `dshmarket`、
+`node_modules/dshmarket` **4,893,393 B / 186 文件**（与解包字节一致 ⇒ 装的就是我验过那发）、另拉进 `undici 7.30.1`、`js-yaml 4.3.2`、`argparse 2.0.1`（`.modules.yaml` `hoistedLocations` 四条）。
+他的 `cordis.patch.yml`（829 B，里面是他自己的模型与设置行）**mtime 仍是 10-18、没被我动**。
+
+**PowerShell 那条坑（新踩的，写死在这）**：`-Command "…"` 外面用**双引号**时，bash 会把 `$_` 与 `$LASTEXITCODE` **自己吃掉**——
+我第一次跑出来是 `/d/mycode/dsh-mobile.ProcessName : 无法将…识别为 cmdlet`（`$_` 被换成了上一条命令的最后一个参数），第二次是 `必须在"+"运算符后面提供一个值表达式`（`$LASTEXITCODE` 变空）。
+写法两种任选：**`\$_` / `\$LASTEXITCODE` 加反斜杠**，或者干脆避开它们（`Get-Process -Name 'DeepSeek*'` 一条通配就够，不用 `Where-Object`）。
+
+**这一发不用点「应用」，也不用重启**（我先写的是"要重启"，**当场被读数推翻**）：它的 `dsh.bundle.patch` 只是往 profile 层栈插一行，**不写宿主**；
+我装的时候客户端在跑（`Get-Process -Name 'DeepSeek*'` = **5 个进程**），按"层栈启动时组合"推应该等他重启 —— 但 `add` 落盘 **2 秒**后 profile 根下就自己长出了 `.dsh-market/`：
+`state.json` **78 B**（`{"disabled":[],"groups":{},"groupOrder":[],"region":"china","regionAuto":true}`）+ `log.ndjson` **124 B**
+（`{"at":"2026-10-21T06:30:37.986Z","level":"info","event":"region","detail":"no region on record; network check chose china"}` —— **这时刻按 UTC 读，北京 14:30:37**；我的 `package.json` 写入是 14:30:35）。
+⇒ **宿主 HMR 会为新 bundle 重组合层栈**（这条以前只在"启停已有插件"的语境里写过），而且那一行日志同时证了两件事：**bundle 真在跑**、**出口真通**（它自己做的网络探域，结果 `china`）。
+**还欠的只有眼睛那一验**：设置页里那条 Plugin Market 在不在，我替他看不了。
+复测时他自己已经把客户端退了（`Get-Process -Name 'DeepSeek*'` = **0**），而 `package.json` mtime 仍是 14:30:35、`bundles` 四项、`cordis.patch.yml` 仍是 10-18 的 829 B ⇒ **"App 退出会把 CLI 写进去的东西冲掉"这个担心没有发生**。
+
+**顺带发现：他在 14:18 已经把 dsh-purge 的「应用」点了**（我 14:1x 报的是"宿主没改"，两个读数都真，只是中间他动了）：
+`resources\app` 存在（**453 M**、目录 mtime 14:18）、`*.dshpurge.bak` **57 份**（散在 `app/dsh/node_modules/@deepseek-ai/*` 各处）、
+`~/.dsh/dsh-purge/` 状态目录 14:18、`~/.dsh/prompt-inject.md` 24,455 B（14:12，**我只量字节没读内容**）、`~/.dsh/redteam/` 14:13。
+`dsh.cmd` 从 243 B 变 **562 B**（mtime 14:18，原件留成 `dsh.cmd.dsh-purge.bak`），多的是三段 `if not exist` 回退：`app.asar` → `app.asar.unpacked` → `app`。
+**`app.asar` 本体一字未动**（182,794,869 B / sha 前缀 `47874618BF5B3011` / mtime 10-17 17:20:50）⇒ 生效靠的是 **Electron 优先加载 `resources\app` 目录**，asar 当底稿留着，这也是它能靠 `.bak` 还原的原因。
+以后我在这台电脑上跑那条 CLI，**入口已经不是我原来认的那一份了**（判 host 有没有被打过，就复测这三个：`resources\app` 在不在、`.dshpurge.bak` 几份、`app.asar` sha 前缀）。
+
+**从它代码里读到的三条规矩**（将来在市场上装东西前要先想到）：
+① `lib/official-desktop.js` 的 `OFFICIAL_PAGE_HINT`：**官方桌面客户端的插件操作要在「设置 → 插件」里做，市场不能通过命令行改桌面端的 profile** ⇒ 它的一键安装走宿主自带的插件管理器，不是我这条 pnpm；
+② 同一文件记着宿主 `checkGithubConnection` **5 秒不通即拒装且不碰 profile**（拒装不是写坏）；
+③ 外域出口按 grep 归类（`lib`+`client`+`locale`）：`github.com` 37、`raw.githubusercontent.com` 6、`codeload.github.com` 6、`bitbucket.org` 4、`cdn.jsdelivr.net` 2、`awesome-dsh-plugin.com` 2、`gist.github.com` 2、`registry.npmjs.org`、`mirrors.cloud.tencent.com` 2、`images.weserv.nl`、`gitlab.com`；
+   `dav.example(.com)`/`proxy`/`host`/`evil.com` 是示例与测试串。**凭证**这块有正证：`lib/http.js:125` 注明转发进宿主前剥 `cookie` 与 `sec-fetch-site`、`lib/gist.js:32` "never read from disk"、仓带 `scripts/check-web-auth-capture.mjs` 测试；
+   反面一条：`lib/backup.js:239` 会把他填的 WebDAV 账号密码转 Basic 头送出（只在他自己开那功能时）。
+
+**版本钉法与退法**：现在是 `file:` 钉 1.66.45 ⇒ 它的自更新不会生效（README：从归档装的只认自己那条源，不会拿同名目录条目当更新）；要自动更新就按名字 `add dshmarket`（源 = 他 npm 配的 npmmirror）。
+退：`dsh plugin --profile desktop remove dshmarket`。改前那两份配置留在 `downloads/market-install/*.before`，逐字节还原可行。
+**仓也照 purge 那轮的规矩落了一份只读参照**（他要说"下载下来"，指的是仓，不只是包）：`reference/gh-3p/dsh-market`，走 `gh-proxy.com` 全量 clone（`ghproxy.net` 备着没用到），
+HEAD `eee2281`（2026-10-21，`fix(restart): take the listening port, not a proxied Host's (completes #956)`）、**1,011 个提交、173 个标签（全是 `v*`）、21 条远端分支、271 个跟踪文件**，
+盘上 **31,331,959 B**（`.git` 21,847,895 B）。作者前列 `fkysly 689` / `Liu Wenjie 63` / `Regulus 57`。
+**我装的那发不是 HEAD**：`v1.66.45` = `eb72f89`（"release 1.66.45"），HEAD 在它之上还多 **3 个提交**，其中一条就叫 `Fix market self-install target (#890)` ——
+这条没进 npm 那发，所以**在市场上装它自己踩到目标选错的话，先想到"我装的是 1.66.45，不是 main"**。
+仓里带 `SECURITY.md`，它对自身边界写得很白（**这句是它的自述，不是我验出来的**）："It runs shell commands (`pnpm`, `dsh plugin`, `git`) against the user's own profile, **by design** — that is what installing a plugin is"，
+以及"holds **no credentials of its own** … Gist backups use a token the user pastes in per action, and nothing is stored"、"最新版本才修，没有维护旧分支"。
+
+**没做**：没重启他的客户端、没替他点任何按钮、没读他的注入文本、没装目录里任何插件、没碰手机端、没提交。
+
+#### 14.24 末节：他接着说"那两个插件也帮我装到手机上"（2026-10-21 傍晚，手机没连，只做了准备）
+
+他那句原话里还带了一件结案：**手机端语音他自己已经闭环了**（插件里关掉再打开），"你也不用再测这个东西了"。
+这条从待办划掉，以后不再测、不再提（见 PROGRESS「下一步」14 的改口）。
+
+装插件这件事在手机上不能照电脑上那条命令抄，**三处不对等**（这三条里前两条是我读过的盘上事实，第三条是没读到的未知）：
+
+1. **profile 名字不一样**。电脑上是 `desktop`（官方客户端自己的那份），手机上这轮一直用的是 `web`
+   （证据：`scripts/dsh-entry.js` 与 `dsh-chroot.sh` 起服务时带的 `--profile web`，以及 13/14 节里那些 `dsh plugin --profile web` 的读数）。
+2. **宿主形态不一样**。电脑那份是 Electron（`D:\program files\DeepSeek\resources`，purge 靠"解包成 `app` 目录 + `.dshpurge.bak`"改它）；
+   手机那份是 **npm 全局装的 `@deepseek-ai/dsh`**，没有 asar、也没有 Electron 那套资源目录 ⇒
+   **dsh-purge 的「应用」在手机上到底能改什么，我完全没验过**，不能假设它有效果，也不能假设它报错。
+3. **chroot 里有没有 pnpm 我不知道**（电脑侧 `dsh plugin` 是把参数原样转给 pnpm 的，14.24 前面那几条装包读数就是走 pnpm）。
+   没有的话 `dsh plugin add` 必坏，而补 pnpm 要 `npm i -g pnpm` = **装包，得他点头**（铁律 7）。
+
+所以我做的是"把前置量出来"这两件，一个字节都不写：
+`scripts/dsh-plugins-probe32.sh`（纯只读，7 节：解释器与包管理器在不在 → dsh 真身与 npm 全局前缀 → profile 名单和 `web` 那层现状 → `dsh plugin --profile web list` →
+registry 配置 / `/etc/hosts` 相关行 / 对 npmmirror 两个出口各取 2 KB 并记 `http` 与 `size_download` → 空间、3080/3081、dsh 进程 → purge/market 的历史痕迹），
+`tools/install-phone-plugins.sh`（写操作但带铁计数：本地清单 2 → 推上去 2 → sha256 逐字节撞上 2，**不等就停**；`--check` 模式只量前置不写；
+真装只跑 `dsh plugin --profile web add /root/dsh-plugins/<tgz>`，**不重启引擎、不点「应用」**，末尾打印回滚命令，读数落 `downloads/plugin-install-<时间戳>.txt`）。
+
+tarball 我按电脑侧那两发的原件留着（`D:\tools\dsh-plugins\`，sha 记在上面的清单里），手机侧不需要重新下载 ⇒
+ 这条绕开了 14.22 那个"解析/出口"的病根，也和模型那轮一样是"电脑代取 + push"。
+**本节没有任何设备侧读数**（手机今晚才插），上面所有关于手机现状的话都属"待复点"，探针跑完才能当事实用。
+
+### 14.25 他自己交了一份"我这台机上什么干不了"的清单，逐条对表：三条它判早了、三条我们早就有解、三条真补不上（2026-10-21 傍晚，读 [手机端情况.md](手机端情况.md)）
+
+那份文件是**他今天在使用时让手机上的 dsh 自己总结的**，不是我的读数。所以这一节的写法是：
+**每条先标"它的原话"，再标"我们盘上已有的真源"，最后标"修法要不要他点头"**。
+本轮**一个设备侧读数都没取**（手机没插），下面的判断全部来自仓库里已有的读数与脚本源码；
+拿它当"今晚怎么查"的计划看，别当结论看。取证工具已经写好：`scripts/dsh-envclaim-probe33.sh`（只读，走 `tools/run-probe.sh`）。
+→ **当晚 北京 17:57（= UTC 09:57） 跑过了**（`downloads/p33.txt`）：复点结论与我这两处错处都写在 **14.27 七**（dpkg 是 **119** 不是它自述的 124；`unshare -mpid` 那发 rc=1 是**我参数写错**不是内核拒绝；
+第 8 节标题那句"只数不列内容"是假的 —— 它下面那条就是列名字的，名字留着但话改成了"没读任何 App 的私有文件内容"）。这一节下面的判断按原样留着当"对表过程"，别再当"待办"读。
+
+**一、它判早了的三条**（不是它算错，是它只知道自己那套内置判据，看不见我们外挂的东西）
+
+1. **"内核禁止创建 namespace ⇒ `workspace-write` 直接不可用，只能 `danger-full-access`，等于没有隔离"**。
+   盘上真源（14.11）：**禁的只有 user namespace**（这台内核 `# CONFIG_USER_NS is not set`，所以 bwrap 起不来、Landlock 也没编），
+   **mount namespace 是 `=y`**：root 直接 `unshare -m` 实测 exit=0，唯一前提是 `$ROOTFS` 得先是挂载点
+   （`dsh-chroot.sh` 的 `mount_fs()` 里那句 `mount --rbind "$ROOTFS" "$ROOTFS"` 就是为这个铺的路，源码注释带着条读数）。
+   我们已经据此做了说 bwrap 方言的 runner（`scripts/dsh-unshare-run.sh` → 机上 `/usr/local/bin/dsh-unshare-run`），
+   **验收 34 PASS / 0 FAIL**（`downloads/verify-runner-3.txt`）。
+   ⇒ 所以这句要改成：**"上游那两条后端在这台机上没有；官方留了 `runnerCommand` 一个口子，围堵已经在盘上，只差没接线"**。
+   没接线的账：`profiles/web/cordis.patch.yml` 里至今没有 `runnerCommand`（14.11 四·2 明写着"没接线"）。
+   今晚探针 33 第 3 节就是复点这个：runner 还在不在位、profile 里那两行有没有、档位 env 落在哪儿。
+2. **"无 systemd ⇒ 进程挂了就没了、不能开机自启"**。
+   开机自启这条我们**早就做了**，现在是**他自己选的关档**：`scripts/dsh-boot.sh` → 机上 `/data/adb/service.d/50-dsh.sh`，
+   2026-10-20 晚改成"入口在位就起 `--entry`"（14.14 ④），文件名现在是 `.off`（第 0 节，他定"保持手动开"）。
+   "进程挂了就没了"这半句也过时了：常驻入口自己带看护 —— `dsh-entry.js:174` `S.restartTimer = setTimeout(startEngine, S.backoff)`，
+   `:465-474` 上游回 401 就重换 cookie、手上没 token 就判定引擎换代并重拉。
+   ⇒ 修法不在机器上，在他那一下：**要不要把 `.off` 拨回 on**（这条 2026-10-19 深夜是他自己定"保持手动开"的，
+   控制台菜单第 8 项就是这开关，`mv /data/adb/service.d/50-dsh.sh.off 50-dsh.sh` 一条命令可复原 —— 改主意只需一句话，我不自己拨）。
+3. **"`/system/bin` 整个不存在 ⇒ 不能发通知、读剪贴板、调摄像头麦克风、装 APK、读电量"**。
+   这句**观察对、归因错**：不是 Android 没这些，是 **chroot 里没挂 `/system`**。`dsh-chroot.sh` 的 `mount_fs()` 只 rbind
+   `proc sys dev` 三条 + `dev/shm`、`run`、`tmp`，再加 `/phone`，**没有 `/system`、没有 `/vendor`** —— 这是设计选择，不是限制。
+   探针 33 第 1 节就是量这个：宿主挂载表里 system/vendor/product 那几行的设备号、chroot 里 `/dev/binder` 与 `/dev/hwbinder` 在不在、
+   `/system` 目录在 chroot 视角存不存在。
+   ⇒ 真要给他 Android 接口，两条路：① 把 `/system`（+ `/vendor`）**只读** rbind 进 chroot，`getprop/pm/dumpsys/screencap` 就能跑；
+   ② 不给 chroot，改由**宿主侧**我们自己的脚本代理（他点一下、我们代做，接口边界留在我们手里）。
+   **这条是新增权限**，按红线要走"完全访问"那一档之外的新判断，等他明确点头才动，且我倾向②。
+
+**二、它列的"没装但能补"——这条我们早就有决定，今天是他重新开口**
+
+它说 `dpkg` 只有 124 个包、`python3/git/gcc/make/ffmpeg/imagemagick/poppler-utils/unzip/tmux` 全无，问"要不要一条 `apt-get install -y` 装上"。
+盘上真源：第 3 节记着当初**故意不装**（v3 装环境脚本的第四条被推翻的记录里写着"工具链一律不装"，实际只多四个包：
+`ca-certificates / curl / xz-utils / iproute2`）。**这是选择，不是缺漏** —— 少装是少暴露。
+它附在后面的那句更对：`docker/podman` 装了也没用（无 user ns），`tmux` 只服务 `dsh-tool-terminal`。
+⇒ 今晚**不要照它那串直接装**。探针 33 第 6 节先用 `apt-get -s`（模拟，一个字节不写）把三档读数取出来：
+新装包数（逐行数 `Inst`）、`Need to get X MB`、`After this operation, Y MB additional disk space`。
+拿到数再按"最小那批（git / python3 / python3-pip / unzip / file / tmux / sqlite3）"和"完整那批（加 ffmpeg / imagemagick / poppler-utils）"两档报给他，
+**装不装、装哪档，是他的决定**（这本来就是待办 #32 那条，只是范围从"只装 git"变成"他这份清单"）。
+
+**三、它报的网络失败，与我们已经建好的那条修法对不上号**（这条是**真 bug**，不是限制）
+
+它列：`registry.npmjs.org / pypi.org / files.pythonhosted.org / api.anthropic.com / api.github.com / raw.githubusercontent.com` 全失败，
+但 `registry.npmmirror.com`、清华、阿里、`api.deepseek.com` 通，且"`github.com` 直连不通、`codeload.github.com` 反而 301 通"。
+这形状**和 14.22 完全一致：病在解析，不在 443**（这台机 UDP 53 基本废）。`github.com` 与 `codeload` 一对比就是铁证 —— 同一堵墙不会只放一半。
+对表 `tools/doh-hosts.sh` 的名单：`LIST_PIN` 里有 `github.com / codeload.github.com / objects.githubusercontent.com / registry.npmmirror.com / cdn.npmmirror.com`，
+`LIST_WATCH` 里有 `raw.githubusercontent.com / registry.npmjs.org / ports.ubuntu.com / archive.ubuntu.com / security.ubuntu.com / cdn.jsdelivr.net`，
+**`pypi.org` 与 `files.pythonhosted.org` 两条名单里都没有** —— 它报的失败里有一部分是"我们根本没给它钉过"。
+⇒ 三步修法，全在现有工具里，不用新写东西：
+① `bash /root/doh-hosts.sh --check` 复点（只报不写）；② 把 `pypi.org / files.pythonhosted.org / api.anthropic.com` 补进名单
+（**补之前要先在手机上实测"从 DoH 拿到的 IP 真能落字节"**，按铁律 5：验收不许带 `--resolve`，`--sync` 写前逐字节备份 + 比 sha256）；
+③ 周期对账 —— 这条正是待办 #33 等他点头的那件事，**他这份自述就是它的现实收益**：不周期对账，钉进 hosts 的 IP 一漂，
+apt/npm 突然坏就会被误判成"网络又不通"（它这次已经误判了一轮）。
+顺带一句：`registry.npmjs.org` 就算解析修好也不该用，这台机的 npm 出口按 `~/.npmrc` 配的是 npmmirror（它自己也是这么活的）。
+
+**四、真补不上的三条**（我不打算绕，写清楚省得将来再花一轮）
+
+图形界面与操作屏幕（无 X/Wayland、无 GL 栈）、渲染网页 JS（`web_fetch` 只拿 HTML 原文，要真渲染得装浏览器内核）、
+Android 那一侧的"点屏幕/拍照/连蓝牙"。
+前两条是这台机的物理形状；第三条严格说也不是"没有"，是"没挂"，见上面第一条里那句归因。
+
+**五、它这份自述里最该记下的一条，不是限制，是暴露面**
+
+它写"`/phone` 就是手机真实存储，**里面能看到应用的数据目录**"。这行字值得单独立个待办：
+工作区根 = `/phone`（第 0 节那张表：`/data/media/0` bind 进来，`workspaceRoot` 就是服务 `process.cwd()`，登记表里显示名「手机存储」，实测顶层 116 个条目），
+**而它的会话档位今晚要复点才能定**：部署默认我们钉的是 `workspace-write`（14.10 落在 `/root/.dsh-env` 那一行 `export DSH_PERMISSION_MODE=workspace-write`），
+可它这份自述里连发了几十发命令（`df`/`ls`/`apt-get update`/一串 `curl`）—— 按 14.4 那条读数，`workspace-write` 在这台机上 Bash 是**直接被拒**的
+（上游那句 `refusing to run the command unconfined`），所以它这一会话多半走的是 14.5 那条**会话内升到 `danger-full-access` + `approval/policy=never`** 的路。
+两把退路**已经在脚本里**，不用改代码：`DSH_WORKDIR=/phone/Download`（收窄工作区）或 `DSH_NO_PHONE=1`（完全不挂存储）。
+⇒ 建议与"接线围堵"一起定：接上 `runnerCommand` 之后，`/phone` 里除了工作区那一条可写，其余全冻只读（14.11 那个"先全冻、后点名"的顺序就是为这个写的）。
+**今晚先复点、后报数、再让他挑，我不自己按。**
+复点位两处：探针 33 第 3 节（`/root/.dsh-env` 里那一行 + profile cordis 里有没有 `runnerCommand`），
+以及他自己在 App 底栏看一眼那颗盾牌片现在写着什么（这个我只能让他看，替代不了）。
+（**它那句"能看见应用的数据目录"我还没复点**：`/phone` 的挂载源确实是 `/data/media/0`（`dsh-chroot.sh:45`），
+所以"能列出 `Android/data`"在形状上合理，但**具体看得见哪几个 App 的目录、看得见多少文件**要今晚数出来才能当事实用 ——
+已补进探针 33 第 8 节，只数条目不读任何私有文件内容。）
+
+**没做**：没插手机、没取任何设备侧读数、没 `apt install`、没改 `doh-hosts.sh` 的名单、没往 `cordis.patch.yml` 写 `runnerCommand`、
+没动 `.off`、没 bind `/system`、没重启引擎、没提交。本轮只新增一支取证脚本（`scripts/dsh-envclaim-probe33.sh`，只读，CR=0 / `bash -n` 过）与这几节文档。
+
+**顺手改了一处会骗人的注释，要留痕**：`config/dsh-env` 里那句"上游 0.2.1-rc.2 没有自定 runner 的配置位"是 10-20 写的，
+当天晚些时候 14.11 已经把它读翻了（`runnerCommand` 就是官方留的位）。这种旧注释最坏的地方在于**它会被下一个读文件的人（包括手机上的 dsh 自己）当事实**，
+所以原话留着、就地加了改口段与那两行接线形状。**只改注释，`export DSH_PERMISSION_MODE=workspace-write` 那一条一个字没动。**
+字节账要记清，免得下次对不上：模板 `config/dsh-env` 从 **1,687 B / md5 `82bdb1f3af4fcdda531a3d998d037c23`** 变成 **2,713 B / md5 `d14068c776baeab18e5a9fc14e344607`**（CR=0 / 32 行）；
+**机上那份 `/root/.dsh-env` 我没推、没动**（还是 1,687 B 那一版）。
+⇒ 这里有个坑要写明：**不要拿模板去覆盖机上那份** —— 机上那份可能带着他自己的 key 行与其他他改过的东西，模板里没有 ⇒ 覆盖就是删他的配置。
+真要同步注释，走"逐行比对 + 只补注释行"的路，且要先 `cp` 备份、量 sha256，这属于写操作，等他在场再说。
+
+### 14.26 两份 REA 对比报告读完，拿来跟我们自己的代码做了一次差分：六成我们已经做了、五条真缺口、六条明确不抄（2026-10-21 傍晚，手机没连，本轮零设备读数）
+
+他让我"参考一下 docs 里那两篇，看看有没有可用的、没考虑到的地方"。读的是
+[docs/dsha-vs-woaiys3-rea-report.md](docs/dsha-vs-woaiys3-rea-report.md)（53,150 B，手机侧那份：DSHA 的 proot 方案 vs woaiys3 的无容器方案，66 条带 `文件:行` 的做法）与
+[docs/desktop-harness-clients-rea-report.md](docs/desktop-harness-clients-rea-report.md)（40,098 B，电脑侧那份：官方 Electron 壳 vs 社区壳）。
+**做法不是照它的清单打勾** —— 那清单有 66 条，勾一遍只会造出一堆重复劳动。我做的是反过来：**把每条判据拿到我们自己的三个文件上找证据**
+（`app/src/com/zhl/dsh/MainActivity.java` 1,095 行、`scripts/dsh-entry.js` 70,487 B / 1,048 行、`scripts/dsh-chroot.sh` 23,047 B / 380 行），
+分成"已经做了 / 真缺 / 不适用 / 明确不抄"四堆。**下面每一条都带我们自己的行号**，不是它那边的行号。
+
+**一、已经做了的（报告帮我校正了一件事：我们早就在抄，只是没记出处）**
+
+| 报告里那条做法 | 我们这边的证据 | 是不是一回事 |
+|---|---|---|
+| 原生壳地址写死、包内**不带 token**（DSHA 的 `:3080` 教训） | `MainActivity.java:76` `DEFAULT_URL="http://127.0.0.1:3081/"`；`build.sh:34-36` 明写"旧版烤带 token 的 3080 地址是定时炸弹" | 同一条，而且我们是**踩过之后改的** |
+| pid 先落地再 spawn | `dsh-entry.js:556` | 同（注释里就写了 DSHA 同纪律） |
+| 防重复 spawn：**先看句柄再看端口** | `dsh-entry.js:146`（`S.engine && !S.engine.killed` 直接退） | 同；端口那半我们在宿主侧（`dsh-chroot.sh:285` `entry_up`） |
+| 上游端口以**启动行实际报的**为准，不按配置猜 | `dsh-entry.js:189` | 同 |
+| 一次性 token 整行 + 43 位 base64url 判据，拒半行 | `dsh-entry.js:75-76`（`STARTUP_LINE` / `AUTH_COOKIE`） | 同形状（它引的是 `DshAuthUrl.java:25-26`） |
+| 每代只交换一次 cookie，凭据只在内存 | `dsh-entry.js:84`、`:196-219`（token 用过即清在 `:207`） | 同 |
+| 常数时间比较；口令不走 URL query | `dsh-entry.js:231`、`:252-254`（只读 cookie `dsh-entry`） | 同 |
+| Host 头白名单（防别的来源把它当代理用） | `dsh-entry.js:242-245` `hostAllowed()` | 报告那份 66 条里没有，我们因为 14.16 那条 403 自己长出来的 |
+| **停止哨兵**（`.dsha-stopped` 同思路） | `dsh-entry.js:65`、`:145`、`:581`；`--stop` 写过它，`--start` 清它（`:555`） | 同 |
+| **代次**：上一代迟到的启动行不算 | `dsh-entry.js:148-149`、`:188`（`gen !== S.gen` 直接丢） | 同 |
+| **慢启动只提示、不重启**（DSHA 那条） | 我们对"exit 的引擎"重拉（`:168-177`），对"活着但迟迟不打启动行的引擎"**没有任何杀它重拉的定时器** | 同 —— 而且这不是巧合：14.17 那轮量出冷启 3~8 秒，加了重拉就会双 spawn |
+| Cookie 在**回调里**才 `loadUrl`，且 `flush()` | `MainActivity.java:779-801`（`openEntry()` → `setCookie(...)` `:788` → `onReceiveValue` → `cm.flush()` → `startLoad`）；注释 `:63` 已经写了出处 | 同（这条我们本来就记了出处） |
+| WebView 三开关：file 关 / 混合内容禁 | `MainActivity.java:174-176`（`setAllowFileAccess(false)`、`setAllowContentAccess(false)`、`MIXED_CONTENT_NEVER_ALLOW`） | 同，注释 `:174` 就指着 `WebPreviewActivity.java:671-680` |
+| 外站交系统浏览器、内站留本窗 | `MainActivity.java:200-203` + `onCreateWindow` `:262-277` | 同 |
+| 子资源失败不许把整页踢掉 | `MainActivity.java:207-210`（`if (!req.isForMainFrame()) return;`） | 同 |
+| **导航失败要分形状给不同的话** | `MainActivity.java:214-222`：404 / 503 / 502 各一屏 | 同；报告里 DSHA 是一屏通用文案，我们这版更细 |
+| 判"通"不只看状态码（它那条 `healthOk` 读真实内容） | `dsh-entry.js:338-350` 算**内联段字节完整性**（`closed`/`whole`，14.17 那轮把"只报顺序"改成"报完整性"）；`dsh-chroot.sh:227` 打 `bytes=%{size_download}`；`MainActivity.java:911+` 自述页读的是正文 | 同一精神的三种落法。**但 `aliveProbe`（`dsh-entry.js:223-228`）确实只看 `statusCode`** —— 它不是"通不通"的证据，是"401 还是 200"的**状态判别**，用来决定要不要重换 cookie。这条别误改，改前先想清它在判什么 |
+| 凭证不进 argv / 不进日志 | `dsh-entry.js:101-104` `redact()`（`token=` 与 `dsh-entry=` 两处都盖），日志 0600（`:109`），含 token 但不合式的行只记一句不落正文（`:185`） | 同，且比它严：DSHA 那边是"原文 tee 到 /sdcard"（我们 14.12 明确不抄） |
+| 交付物传输要逐字节撞得上 | `tools/run-probe.sh:51-53`（md5 不撞就 `exit 1`）、`tools/install-phone-plugins.sh:82-84`（sha256 + 三计数）、`tools/deploy-entry.sh:56-62`（推完 `wc -c` + CR 字节数都打） | **比报告那条更硬**（它只要求 size→sha256，我们要三计数相等才算落进去） |
+| 只绑回环、不做 LAN 代理 | `dsh-entry.js:116`（`只绑本机回环`），`MainActivity.java:65` 注释写明"DSHA `LanProxyService.java:308` 那条绑 0.0.0.0 的不抄" | 同 |
+| 老内核/老 WebView 的兼容层（它那条 `Iterator.prototype.join` polyfill） | `entry-compat.js` 由入口按 mtime 热读、在出口内联（`dsh-entry.js:62`、注入段 `:311-352`） | 同族；我们那份是给上游 bundle 补的，机制还多了"热读 + 完整性自检" |
+
+这一堆的结论值得写死：**那 66 条里真正"我们没做"的不到十件**（下面第二节）。
+所以这次最大的收益不是清单，是**给已经做了的东西找到出处与判据名** —— 下次他说"这块谁做的判据"，我能报行号而不是回忆。
+
+**二、真缺口（五条，按"要不要他点头"分好）**
+
+1. **壳里那条 native 通道没有来源校验**（这是这轮挖出来的最实在一条）。
+   `MainActivity.java:241-252` 的 `onJsPrompt` 只做一件事：`message.startsWith("dsh:")` 就交进 `fromPanel`。
+   而 `fromPanel`（`:878-908`）能做的不少：`retry` / `diag` / **`clear`（抹掉所有 cookie + 清 prefs）** / **`apply`（把新的 URL 和新的入口口令写进 SharedPreferences）** / `open`。
+   它拿到回调给的 `url` 参数**没用**。⇒ 只要能在这个 WebView 里执行 JS，就能驱动这些原生动作，包括"把入口地址换成别的 loopback 端口 + 顺手换口令"。
+   报告那条正好治这个：**DSHA 的 `WebMessageListener` 做同源 + 顶层帧 + 代次三重门**（它引的 `:671-680` 一族）。
+   我们没有 `addJavascriptInterface`（好事），但**"没用那个接口" ≠ "有校验"** —— 这句话要留在文档里，免得下一个读代码的人以为已经严了。
+   改法很小：`onJsPrompt` 里加三条（`url` 必须是入口 origin 或我们自己的 `PANEL_BASE`、是主帧、代次对得上）。
+   **但这是 APK 改动 ⇒ 归 0.7 候选，见第 4 条那句"今晚不重建"**。
+2. **503 / 502 之后不会自己再来一次**。`MainActivity.java:220-221` 遇到 503/502 只 `showPanel("engine", …)`，要他手动点"重试"；
+   那个 `retryLeft = 2` 的看门狗（`:820-834`）管的是另一种症状 —— "**导航根本没开始**"，不是"导航开始了、上游还没就绪"。
+   这正好对上他 14.18 报、现在挂在待办里那 10~37 秒黑屏：**引擎冷启 3~8 秒（14.17 读数）、restart 那一瞬更久，这段时间入口回的是 503 纯文本**（`dsh-entry.js:354-358`），页面拿到文本就停住了。
+   报告给的答案是 DSHA 那条"**主框架加载失败重试 120 次 × 2.5 s**"。
+   **但我们有一条比它便宜的路**：503 是**入口**发的，入口改一行 —— 对"主帧导航"（`Accept: text/html` + `Sec-Fetch-Mode: navigate`）回一段带 `Refresh: 2` 的最小 HTML 而不是纯文本 —— **就自愈了，且不用重装 APK**（`tools/deploy-entry.sh` 推上去就生效，`--selftest` 再加一条判据）。
+   这一条是我这轮最满意的发现：**前人经验告诉我们症状，我们自己的三层形状给了一个更便宜的解**。等他在场挑走哪条（或两条都做）。
+3. **没有崩溃处理器**。全仓没有 `Thread.setDefaultUncaughtExceptionHandler`（grep 过，零命中）。
+   `shell.log` 是在的（`:165-166`，落 `getExternalFilesDir(null)`），所以**它没崩的时候**日志很够用；真崩了就是无声退出。
+   DSHA 那条"崩溃处理器 + `startup-diag.txt`"就是这个洞的补丁。八行代码的事，归 APK 改动 ⇒ 0.7。
+4. **pidfile 没有"出生身份"**。`dsh-chroot.sh:169` / `:171` 判活只看 `/proc/<pid>` 目录在不在，`--stop`（`:339-343`）与
+   `dsh-entry.js:584-587` 拿到 pid 就 `kill`。**PID 复用在这台机上是真风险（推断，本轮没有读数）**：Android 默认 `pid_max` 是 32768，
+   而我们这套一天里 spawn/退出很多轮。DSHA 的做法是另存一份 `.dsha-web.identity`（cmdline + 启动时刻），杀之前比一次"是不是我生的那个"。
+   改法便宜且不碰 APK：pidfile 旁边记 `/proc/<pid>/stat` 第 22 字段（starttime），kill 前比。
+   **它和"杀错进程"的后果连在一起**：这里杀的是 root 侧的 node，杀错一次可能带走他正在跑的会话。
+5. **手机端没有一份"常驻清单"**。我们只在**推的那一刻**逐字节撞 sha（上面第三节那条），
+   所以"手机上这六件今天还是不是我推的那份"这个问题**现在要现场比一遍才能答**。
+   DSHA 的 `KernelSelfCheck`（size→sha256 + 内核/用户 extra 分家 + JSON 账本）就是为这句话准备的。
+   建议：项目里放一份 `tools/phone-manifest.json`（入口 / compat / doh-hosts.sh / runner / 241 MB 模型目录 / 两发插件 tarball 的**期望字节与 sha 前缀**），
+   配一支只读探针复点，一次跑完给"几件撞、几件不撞"。**这条今晚就能用上** —— 他问的就是"新开一个会话你还知道进行到哪吗"，而清单比我的记忆可靠。
+
+**还有两条我对过、结论是"我们不缺"，写下来免得下次又当新发现**：
+
+- **构建即校验（它 66 条里最后那条：BOM、API key、摘要、签名）**：CR 这一半 `tools/run-probe.sh` 已经当场拦（不撞就不推）；
+  BOM 那一半 `javac` 自己会炸（`\ufeff` 落在文件首），而模板展开那两段 python 一律 `newline='\n'` 写（`build.sh:44`、`:58`）⇒ 闸门本来就在，不必再新造一层。
+  签名与摘要：成品每次打 `sha256sum`（`build.sh:99-101`），装机后认 `sha` + `dumpsys` 的 `versionName` 两个数 —— 这条也已经在铁律里。
+- **"token 短于一律拒"那类口令下限**：我们的入口口令是**生成时就定死的 43 位 base64url**（`dsh-chroot.sh:181-186`，
+  造出来是空的就 `die`，注释原话"不退回空口令：那是敞开给本机所有 App"），`--start` 拿不到口令直接 `exit 2`（`dsh-entry.js:552`）
+  ⇒ 形状上比它那条"长度下限"更硬，因为它防的是"人设了个短口令"，我们根本没给人设的机会。
+
+**这三件我不建议现在动**，写清楚免得下次手痒：
+**前台服务 / 通知栏控制**（报告 4.3 那条，两家都有）—— 我们的引擎是 **root 侧守护进程**，不归 AMS 管，加前台服务保的是壳 Activity 不被优先回收，
+这跟"保引擎活着"不是一件事（**推断，没实测过 LMK 会不会杀 node**）；而且一旦加就是常驻通知，和他"自启保持手动开"那个选择相冲，
+还要按那条老规矩写明"关窗口 ≠ 停服务"。**要不要，等他定**。
+**双 flavor（标准系统 WebView / 兼容版 Gecko）**、**Lite 与正式包名端口共存** —— 他现在只有一台机、一个包，这是分发给别人时才值的钱。
+**41 个设备工具**（截图/点击/无障碍/虚拟屏）—— 报告第 8 节自己就建议"先做 3-5 个高频的"；而这三条里最该等的其实是待办 #42 那个问题：**Android 接口到底给不给**（14.25 一·3）。给不给还没定，先做工具等于替他把决定做了。
+
+**三、不适用（不是不做，是路线不同 ⇒ 别追）**
+
+proot 相关那一族（`nativeLibraryDir` 躲 W^X、不 bind `/linkerconfig`、`NARB_DISABLE_NATIVE_CACHE=1`、`--link2symlink` 只在文件系统不支持硬链接时加、`.l2s` 同宿主绝对路径）——
+我们是**真 chroot**，没有 ptrace 翻译层，这一整族一个都不落在我们身上。
+四类原生模块补丁（`node-pty→child_process`、`sharp→纯 JS + link→rename`、`bash-local` 的 `sandboxMode` getter、`session-persistence-jsonl` 的 `link→rename`）与
+随包 `openssl.cnf` / Git 七件套 / 三套 CA 变量 / `LINKS.txt` 物化 soname —— 那些是 **bionic 直跑 node**（woaiys3）的债；
+我们 chroot 里是 Ubuntu，`apt` 一把都有。**这正是我们这条路线花掉 98 MB rootfs 换来的东西**，报告帮我把"值在哪"说清了。
+社区 Electron 那份（Profile/检查点、`session_projcache` 改名隔离、AppImage 的 detached-bash 重启、Windows pwsh ACL runner、`ELECTRON_RUN_AS_NODE` 跳板、LAN HTTPS + safeStorage）——
+我们手机侧没有 Electron，电脑侧用的是**官方**客户端，不自己写壳 ⇒ 整篇的落点是"以后真要自己写桌面 harness 时"。
+
+**四、明确不抄（报告自己警告的六条，我们对了一遍：一条都没踩）**
+
+| 它说别抄 | 我们 | 证据 |
+|---|---|---|
+| `targetSdk 28`（它为了 bionic node 可执行停在旧 target） | 35 | `app/build.sh:90` `--target-sdk-version 35`，`:16` `MIN_API=26` |
+| `setAllowFileAccess(true)` + `addJavascriptInterface` | 都没用 | `MainActivity.java:174` 是 `false`；全仓零 `addJavascriptInterface`（但见上面缺口第 1 条那句"没用接口 ≠ 有校验"） |
+| 线上 APK 用 debug keystore 那套双签名历史 | 一把自签、一把就够 | `build.sh:63-73`（不在就造，PKCS12/RSA2048）。**要记的一条自家风险**：`app/local/dsh.keystore` 实测 2,706 B、`app/local/` 在 `.gitignore:2` ⇒ **它只在这台电脑上、没有第二份**，丢了就得卸了重装。**要不要备份到哪儿，他定**（我不擅自往别处放签名库） |
+| 11k 行单体 `MainActivity` + 复制一份 compat | 一个文件 1,095 行、零副本 | `wc -l` 实测；没有 compat 副本 ⇒ 不存在"改一处碰另一处" |
+| 默认 `danger-full-access` 且把沙箱关掉 | 部署默认钉 `workspace-write` | `config/dsh-env` 那一行（机上那份 1,687 B 版，见 14.25 末）；档位要翻是他点头的事 |
+| 无脑 `--link2symlink` | 不用（chroot） | 上面第三节 |
+
+**五、这次读报告的方法本身，两条要留下**
+
+1. **两篇报告结尾都自述"没构建、没安装、没运行任何 APK / 没连手机 / 没复跑任何 PASS 数"**（第一篇 §10、第二篇 §9）。
+   所以它们里面的 288 MB / 162 MB / "冷启动更快" / "109 PASS / 772 PASS" **全是项目自述或标了推断的**，我们引用时必须带着这个身份（本轮我一次都没引用它们当结论）。
+   这与 14.12/14.20 那两轮的教训是同一课：**REA 给的是路标，不是结论**；它不认 Java、Manifest、Gradle，
+   而手机侧的真相恰好全在 Java 里（第一篇 §9.2 那个例子：`android-app` 只解析了 3 个 `.mjs`，21 个 Java 文件 32,999 行完全没进图）。
+2. **读法要反过来**：先前我差点顺着"66 条 → 逐条打勾"走，那会产出一堆重复实现和一份长长的假缺口。
+   真正有产出的是**拿每条判据回我们自己的文件里找证据**，找到的就记行号（下次不用重新发现），找不到的才叫缺口。
+   这次找到的"其实已经做了"有 20 条，真缺口 5 条 —— 比例 4:1，这个数字本身就值得记进铁律。
+
+**没做**：没插手机、没取任何设备侧读数；**没改一行业务代码、没重建 APK**（今晚要装的那一发仍然是 `versionName 0.6` / sha `17c280ac…`，待办 #38 的指纹不作废）、
+没推 `dsh-entry.js`、没动 `cordis` / 档位 / 自启 / hosts 名单；没新建 flavor、没加前台服务。
+本轮只做了三件事：一次本地重跑（`node scripts/dsh-entry.js --selftest` ⇒ **合计 58 条：PASS 58 / FAIL 0**）、
+三个文件的差分审计（行号见上）、以及本节 + 14.16 那条 59 的过时改口 + AGENTS 铁律 12 与两条命令/坑位 + PROGRESS 下一步 23。
+缺口那五条**全部等他点头再动**，其中第 1、3 条要付一次 APK 重建（0.7），第 2 条有"只改入口、不重装 APK"的便宜路。
+
+### 14.27 两发插件真进机了（2/2/2），而且**没重启引擎它自己就接住了**——为判这条我连开五发探针，顺手抓出自己四个读数坑（2026-10-21 傍晚 17:47–18:15，手机在场）
+
+**缘起**：他 17:47 那句"我回来了，手机已经连接电脑了，你继续吧"。今晚的顺序提前钉在 PROGRESS 里（状态 28 之后那三条），
+我照顺序走：先复点现场（不假设上一轮还活着）→ 装新图标那发 APK（不重打）→ 插件装进 `web` profile → 复点读数。
+现场复点见 14.26 之后那段的入口读数（活 73,223 秒、`injectMiss=0`、`up401=0`），APK 那条见 14.23 与 `tools/install-apk.sh`（不为装它重打；**17:48 装进去的那一发、与 18:22 那次 `--verify` 复点的逐字节读数，在本节八末尾**）。
+**本节只讲插件这一件事，加上我为了"它到底进没进层栈"摔的四个坑。**
+
+**一、装：三个计数对上了才算落进手机**
+
+| 读数 | 值 | 取证 |
+| --- | --- | --- |
+| 清单 / 推上去 / sha 撞上 | **2 / 2 / 2** | `downloads/plugin-install-20261021-175056.txt` 第 20 行 |
+| 两发的 sha256 前缀 | `7f43fb873782c7ed`（purge 2,026,964 B）/ `5267bdcdf66ab16d`（dshmarket 1,350,488 B） | 本地与机上逐条撞；机上那两份留在 `/root/dsh-plugins/`（`package.json` 里是 `file:` 引用，删了下次重装就断） |
+| profile 的 bundles | 5 → **7**（`dsh-purge`、`dshmarket` 追加在尾） | `downloads/p34.txt` 32–40 行 |
+| `node_modules` 可见条目 | **5**：`argparse dsh-purge dshmarket js-yaml undici`；`.pnpm` 条目 1（只有 `lock.yaml`） | `p34.txt` 45–54 行 |
+| 与电脑那台对照 | **完全同形**（PC 15:23 实测也是可见 5 / `.pnpm` 1） | `p34.txt` 第 10 节 |
+| `dsh plugin --profile web list` | rc=0，两发都在（`dsh-purge@1.1.72-dsh021rc2.4`、`dshmarket@1.66.45`） | `p34.txt` 110–121 行 |
+| 体积 | store 14 M、profile 13 M、`/root/.dsh` 232 M→**245 M**、盘上还剩 341 G | `p34.txt` 104–109 行 |
+
+`pnpm` 这条前置**没卡住**：机上早就有 `/usr/local/bin/pnpm` 12.14.0（`p32.txt` 第 1 节）⇒ 14.24 预留的"要不要往他机器上装 pnpm"作废，没等他点头就有解。
+真卡住的是我自己那条 push：第一发跑崩在"adb.exe 看不见 git-bash 的 `/d/tools/...`"上，症状正是铁律 2 说的那样（清单 2 / 推 2 / 撞上 **0**），
+脚本自己停了、没往下装。修法是 `cygpath -w` + 显式看 push 的 rc，见 `tools/install-phone-plugins.sh:80-87`；`--check` 那条分支不推文件，所以它永远抓不到这个坑。
+
+**二、"要不要重启引擎"这次有答案了：不用**
+
+14.24 我在 `install-phone-plugins.sh` 第 6 节写的是"新 bundle 要进层栈得重启，手机上没验过"。这次验了，**结论反过来**，链条是四条独立读数：
+
+1. **它自己动了盘**。装完 6 秒，`/root/.dsh` 下长出一批**只有这两发的代码才会写**的件：`dsh-purge/override-state.json`（254 B，09:51:06.35Z）、
+   `dsh-purge/installed-rev`（25 B，内容 `apply:1.1.72-dsh021rc2.4`）、`prompt-inject.md`（24,455 B）、`redteam/`（25 件 231 K）、`.agent-presets/redteam/`（3 件），
+   再过 5 秒有 `profiles/web/.dsh-market/{state.json,log.ndjson}`（09:51:12.54Z，日志那条是 `region: no region on record; network check chose global`）。
+   而这两发 tarball 里**都没有 `preinstall`/`postinstall`**（本地 `tar -xOf` 查过）⇒ 不是包管理器跑的。
+2. **引擎没重启，但它正听着 `package.json`**。`pid 17637` 是 10-20 13:27Z 生的（活 73,712 秒），fd 23 是 inotify，监视 5 个 inode，
+   换算成十进制撞出来是 `package.json`(1614790)、`cordis.patch.yml`(1501117)、`profiles/web`(1780368)、`/root/.dsh`(1780366)、`.credentials.yaml`(1789385)。
+   `--dump-config` 的层栈里 `hmr`（`@deepseek-ai/dsh-hmr`）在位，它的 `disabled` 条件是"没有 profile 上下文"⇒ 这台是**启用**的。
+3. **写盘的不是入口**。入口 17611 的 inotify 数 = 0，`/root/.dsh/entry.out` 停在 10-20 13:32:48（68 行，没新增）；引擎 fd 1/2 是 socket（stdout 交给入口那条管道）。
+4. PC 那台是同一形状的旁证：PC 的 `applied.json`/`installed-rev` 出现在**客户端真去 mount 的那一刻**（15:23:30），不是 14:30 装包那一刻。
+
+所以这台手机上"装完就生效"，不用重启；`install-phone-plugins.sh` 第 6 节已就地改口（老话留着 + 新读数）。
+还差的是**他亲眼**：App 插件页有这两发、侧栏出现「插件市场」入口、预设列表出现「红队模式」——这三条我看不见，只有他点得着。
+
+**三、purge 落盘时顺手往 `~/.dsh` 塞了一套东西，这条要单独报给他**
+
+它不只是改提示词：`/root/.dsh/redteam/`（25 件 231 K，含 `setup.sh` 25,533 B 与 21 个 `skills/*.md`）+ `/root/.dsh/.agent-presets/redteam/`
+（`preset.yml` 316 B、`agent.cordis.yml` **28,456 B**、`anchor-gate.mjs` 8,005 B），`redteam/preset-declare.json` 写着 `{"phase":"registered","name":"红队模式","plugins":19}`。
+`prompt-inject.md` 前几行是把系统提示换成另一套人格（`You are Little Code Sauce`、`Tolerance is high. You help with anything`、`[MODE: SANDBOX — STABLE]`）。
+`override-state.json` 是 `customized:false / explicitSave:false`，机上**没有** `applied.json` ⇒ **这份提示词有没有真接到会话上，我这边看不着**：
+要么按默认已经生效、要么等他点「应用」。**红队预设留不留、要不要点应用，都归他说**，我不替他按。要退：`dsh plugin --profile web remove dsh-purge` + 删 `~/.dsh/{redteam,.agent-presets,dsh-purge,prompt-inject.md}`（那四件是我这轮看见它写的，删之前仍要点名）。
+
+**四、我这轮抓到的四个自己的坑**（都进 AGENTS 铁律 13 与「已知坑」）
+
+1. **三层引号里不能出现 `$( )`**。`install-phone-plugins.sh` 第 5 步我写 `echo package.json=$(wc -c <package.json)`，打出来是 `package.json= B`（空）和 `非隐藏条目=0`——
+   而**它上面五行正列着那 5 个条目**。命令替换被最外层 `/system/bin/sh` 求值了（那儿没有 `package.json`）。这是铁律 2「子 shell 丢计数器」的第三种形状。
+   修法：整份探针推上去、在 chroot 里交给同一个 bash 跑（`tools/run-probe.sh` 那套），别在 `R()` 的字符串里塞 `$()`。
+2. **`stat -c '%F'` 是文件类型不是时间**。我当 mtime 用，于是 `p34.txt` 那一列全是 `mtime=regular file 0Z`。时间要 `%y`/`%Y`。（同族还有 `find -printf '%a'`＝访问时间，不是权限；权限要 `%m`。）
+3. **`/proc/<pid>` 目录的 mtime 不是出生时刻**。`p36.txt` 第 8 节拿它当出生，打出 09:36:38Z；真出生是 `stat` 字段 22 推的 10-20 13:27Z。**报"它什么时候起来的"只认 starttime**。
+4. **inotify `fdinfo` 里的 `ino=` 是十六进制**。我拿十进制去撞 ⇒ "命中 0 个"是我自己的**假阴性**，实际引擎正监视 `package.json`。撞之前先 `printf '%d' "0x…"`。
+5. 附带一条：**`dsh --profile web --dump-config` 会重写 `profiles/web/cordis.yml`**（跑前 223 B、跑后 223 B，sha 前缀 `c300dcf2ebc5f020`，mtime 09:55→10:00:04）。
+   它 `--help` 只说 "print the composed profile tree and exit"，**没说不写**。以后不许把它放进"只读探针"；`probe37` 头部已写明这个例外。
+
+**五、`--dump-config` 顺手给的另外两条读数**
+
+- purge 的 patch 有 6 条 target 在这台找不到：`dsh: [dsh-purge] patch: entry "redteam-store"/"redteam-ui"/"redteam-mode"/"redteam-mode-store"/"redteam-mode-ui"/"dsh-purge" not found`。
+  这是**组合期**告警（`dump_rc=0`，输出 1,303 行、`dsh-purge` 命中 16 行、`dshmarket` 命中 2 行）⇒ 它那几个 insert 锚点在 `web` 这台的栈里不存在，
+  **红队模式的 UI/存储锚点在手机上大概率不出现**。这是形状差异，不是坏了；也是"插件装了但页面上看不见"最可能的解释，别一上来当装失败。
+- `base` 层里本来就有 `@deepseek-ai/dsh-plugin-manager`（`disabled: !!js '!ctx.get(''profileContext'')'`）——官方插件管理器一直在这台的层栈里，只是 14.24 之前 profile 里没人用它。
+- 今早 App 插件页那两次操作死过一次：`.plugin-manager/logs/operation-yUm4kv/pnpm.log` = `Command failed with ENOENT: pnpm why '@deepseek-ai/dsh-base' / spawn pnpm ENOENT`（10-20 23:17:06Z = 今早 07:17 北京）。
+  但引擎与入口的 `PATH` 都含 `/usr/local/bin`、`pnpm` 就在那儿（`p38.txt` 第 1、2 节），且 23:18:40/23:18:43 另两次操作留的是 0 B 日志（没报错）⇒ **这条我没定位，标"未定位"**，
+  下次他在 App 里真按装包按钮时再抓现场。
+
+**六、取证脚本入库**（全走 `tools/run-probe.sh`，读数在 `downloads/p34–p38.txt`；本节八那发收尾探针是 `scripts/dsh-traffic-and-cleanup-probe39.sh`，读数 `p39.txt` + 修好后重跑的 `p40.txt`）
+
+`scripts/dsh-plugins-verify34.sh`（把 install 脚本那两个假读数用可信方式重取：bundles 计数、条目数、两发 tarball 的 sha、`list_rc` 改用 `PIPESTATUS`）
+`scripts/dsh-marketdir-probe35.sh`（谁生的 `.plugin-manager`/`.dsh-market`；顺带暴露我用错 `%F`）
+`scripts/dsh-plugin-loaded-probe36.sh`（引擎 fd1/2 接到哪、inotify 监视表、层栈；它的"只读"承诺被 `--dump-config` 破了，第七节自己扫出来）
+`scripts/dsh-plugin-loaded-probe37.sh`（inode 十六进制撞回、`applied.json` 在不在、`entry.out` 有没有新行）
+`scripts/dsh-inode-and-pnpm-probe38.sh`（第 5 个 inode 是 `.credentials.yaml`；`pnpm` 是 `/usr/local/lib/node_modules/pnpm/pnpm` 那个 ELF 的符号链接；引擎与入口 `PATH` 全含 `/usr/local/bin`）
+另外把 `scripts/dsh-envclaim-probe33.sh` 就地改了两处：`unshare -mpid true` 那发 rc=1 是**我参数写错**（util-linux 把它拆成 `-m -p -i -d`，没有 `-d`）不是内核拒绝，改成 `unshare -m -p -i --fork true`；
+第 8 节标题原先写"只数不列内容"，可它下面那条就是列名字的（`p33.txt` 里 135 个顶层名全在）⇒ 名字留着（对他判"引擎能看见多少东西"有用），但把话改成"**没读任何 App 的私有文件内容，只 ls 了一层目录名**"。
+
+**七、`probe33` 那份对表读数补三条先前没数的**（`downloads/p33.txt`，北京 17:57（= UTC 09:57））
+
+- dpkg 已装包 **119**（它自述 124）；`python3 / git / gcc / ffmpeg / sqlite3 / wget / rsync / unzip / file / tmux` 逐个复点**全无**，只有 `node npm npx pnpm corepack dsh`。
+- `unshare -u true` 与 `unshare -m true` 都 **rc=0**（能建），`unshare -Urm true` rc=1 Invalid argument，`bwrap --ro-bind / / true` rc=1 `pivot_root: Invalid argument`；
+  `/usr/local/bin/dsh-unshare-run` 9,530 B、sha `50788b296b118892`、mtime 10-19 23:28Z 在位，`cordis.patch.yml`（508 B）里 `runnerCommand` **命中 0 行** ⇒ 14.25 那条"建好了但没接线"仍然成立。
+- 出网（每发 30 秒窗、不带 `--resolve`）：六个失败域名全是 `rc=6 Could not resolve host`（**快速失败＝解析层**，不是超时），
+  而 `github.com` `rc=0 http=200 572,420 B 0.99 s`、`registry.npmmirror.com` `200 1,319 B 6.6 s`、`mirrors.tuna.tsinghua.edu.cn` `200 22,488 B 0.66 s`。
+  `doh-hosts.sh --check` 对账：hosts 里 14 条钉的 IP 与 DoH 现在的 A 记录**逐条一致或仍在同一池**（`registry.npmmirror.com` 钉 `111.62.184.148`、DoH 给 `112.48.163.3`——CDN 轮换，连通仍 200）。
+- `apt-get -s` 三档模拟：`--no-install-recommends` 那批**新装 291 个包**、默认档 **440**、去掉 ffmpeg/imagemagick/poppler 的最小批 **35**。`/var/lib/apt/lists` 37 条、mtime 今早 06:29Z（够新，这三档数作数）。
+- 资源与暴露面复点：`nproc=8`、`Mem 22Gi / available 9.5Gi`、`Swap 12Gi 已用 6.1Gi`、`/` 与 `/phone` 同一块 `dm-74 935G 已用 64% 剩 341G`；
+  `/phone` 顶层 **135** 条目（**这一格是 `ls -1A`、含隐藏**；`--status` 那格 117 是不含隐藏，两个数同源不同口径，见本节九）、`/phone/Android/data` 下 **533** 个目录、`obb` 16 个；`/dev` 里 `binder hwbinder vndbinder binderfs ashmem kgsl-3d0 dri(card0,renderD128)` **都在**（binder 三个是 777 符号链接），`ion` 与 `graphics/fb0` 没有；无 `DISPLAY`、无 `/tmp/.X11-unix`。
+
+**八、收尾那一发：这轮到底走了多少网、我在他机上留了什么**（`scripts/dsh-traffic-and-cleanup-probe39.sh`；第一发读数 `downloads/p39.txt`，就地修好重跑的第二发 `p40.txt`）
+
+先答不了的那句要写在前面：**17:47 开工时我没取 `/proc/net/dev` 基线**（探针 32–38 一支都没带这一项），所以"整轮走了多少网"按现有读数**答不出增量**，只能答我点得出的：探针 33 里那三次显式 curl 落了 **572,420 + 1,319 + 22,488 = 596,227 B**，
+而插件那两发是 **adb push 走 USB**，压根不占蜂窝计数器。
+
+能诚实量的是"引擎空转 45 秒"。同一支探针跑了两发，两发互相印证：
+
+| 读数 | p39（10:14:51→10:15:36Z） | p40（10:17:31→10:18:16Z） |
+| --- | --- | --- |
+| `lo` | Δrx=Δtx=**82,710 B** | Δrx=Δtx=**82,462 B** |
+| `rmnet_ipa0` | 0 / 0 | Δrx=**104** Δtx=84 |
+| `rmnet_data4` | 0 / 0 | Δrx=**96** Δtx=76 |
+| 其余 `rmnet_data0/1/2/3` | 0 | 0 |
+| `/root/.dsh` 最近 60 秒被动过的条目数 | **0** | **0** |
+
+⇒ 一句结论：**挂着引擎空转的这台机，45 秒出网 200 B 级、回环 82 KB、盘上零写**。
+那 200 B 落在 `ipa0`/`data4` 上、且 p39 那发是 0 ⇒ 量级像移动网络自己的保活而**不是 dsh 发的**（**这是推断，我没有按 uid/进程的归属读数**）；
+那 82 KB 是本地回环往来，`ss -tn` 里与 `:3080` 相关的行 **30 条**（一条连接的本端与对端各占一行 ⇒ 实际约 **15** 条挂着），
+而 `ss -ttnp` 在这台的 chroot 里**回空** ⇒ **"谁在说"我拿不到进程归属**，只报连接数，不猜是入口还是壳 App。
+
+机上那 8 份 `.sh` 我按读数分了类，**并且逐条与仓库件撞了 md5**（对账全文 `downloads/root-sh-residual-md5-20261021.txt`）：**8/8 与本地逐字节相同** ⇒ 这一批里删掉任何一份都原样还得回来，不存在"删了就丢现场"：
+
+- **常驻、有脚本在用**（2 份）：`/root/dsh-entry-check.sh` 13,579 B（= `scripts/dsh-entry-check.sh`，`tools/deploy-entry.sh --check` 跑的就是它，第 9 节与 14.15）；`/root/doh-hosts.sh` 6,293 B（= `tools/doh-hosts.sh`，14.22 装的解析对账，`## 下一步` 第 17 条与待办 #33 要用它）。
+- **一次性取证件**（6 份，全是 10-19 那批，本地同名件全在 `scripts/`）：`dsh-ask.sh` 732 / `dsh-auth-host-probe.sh` 1,464 / `dsh-probe.sh` 3,681 / `dsh-sbx-probe.sh` 3,318 / `dsh-setup-in-chroot.sh` 5,958 / `dsh-terminal-probe.sh` 1,189 B。
+
+**撞 md5 这一趟自己也踩回铁律 1**：第一版我在宿主 `su -c` 里写了 `md5sum /root/$f` —— 宿主视角下那个路径不存在，回的是
+`md5sum: /root/x.sh: No such file or directory`，而 `cut -d' ' -f1` 把 **`md5sum:`** 当成了摘要字段，于是八行全都"不撞"、看着像文件被改过。
+这与 `test -e` 在 EACCES 下返回 false 是同一族：**错误消息进了我要数的字段**。判据改成"设备侧一律按 `/data/local/dsh-rootfs/root/` 读，并且先把原始那一行打出来看一眼"。
+
+**我自己在这一发探针里又抓出四个读数坑**（`p39.txt` 原样留着当证据，别删）：
+
+1. `/proc/pid/stat` 第 22 字段是"**开机后第几秒出生**"，我把减法用反了：`BORN=UP−ST/HZ` 拿去喂 `date -d @` ⇒ 打出 `1970-01-01 20:48:22`，而"活着 100 小时"那格印的其实是 `ST/HZ`（=出生落在开机后第 100 小时）。
+   正确关系：出生 = `/proc/stat` 的 `btime` + `ST/HZ`，年龄 = `UP − ST/HZ`。修完 p40 打的是 **两个 node 都出生 2026-10-20 13:27:14Z、活着 75,062 秒** —— 与本文第二节那记（当时 73,712 秒）接得上；开机时刻 `2026-10-16 08:28:38Z`，机器已活 121 小时。
+2. `ss -ltn | grep -cE ':(3080|3081)$'` 回 **0**，可同一段 awk 明明打出了两条监听 —— **grep 匹配的是整行末尾，而 ss 行末还有 peer / 进程列**。改成"数与上面同一个 awk 的第 4 列"，p40 里两个读数同源（=2）。
+   这类"**同一支探针里两行互相打脸**"只能靠"两格取同一个数据源"来避免，靠措谨慎没用 —— 这是铁律 2 的第五种形状。
+3. `ls -l --time-style=long-iso` 的列是 `$1 权限 $2 硬链 $3 主 $4 组 $5 大小 $6 日期 $7 时刻 $8 名字`，我按 `$6 $5 $1` 打 ⇒ 大小印在日期后头、`B` 挂到了权限串尾巴。字节数没丢，标签错了。
+4. `df -h /` 的"剩"是 **`$4`（Avail）**，我取了 `$6` = 挂载点 ⇒ p39 打出"剩 /"。p40 修好后是**可用 341G**，与前两记一致。
+
+顺手一条正向读数：机上那发 APK 我又用 `bash tools/install-apk.sh --verify` 复点了一遍（**只比指纹、一个字节不写**，输出存 `downloads/apk-verify-20261021-1822.txt`，18:24:13 北京）——
+本地与机上 `base.apk` 都是 **152,167 B / sha256 `17c280ac482263ac…bfc964cb`**、`versionName 0.6`、`lastUpdateTime=2026-10-21 17:48:31`
+⇒ "**装进去的就是我报过的那一发**"这句现在有逐字节正证（`pm install` 回的 Success 我依旧不算数）。
+
+**九、收尾时同一件事冒出三个数，对完了**（`scripts/dsh-phone-visibility-probe40.sh`，读数 `downloads/p41.txt`，北京 18:26（= UTC 10:26））
+
+`/phone` 顶层条目这件事，今晚我手上同时有三个"都对"的数：**135**（探针 33 第 8 节）、**117**（`dsh-chroot.sh --status` 第 55 行）、
+以及我自己随手一条 `--run 'ls /phone'` 回的 **`No such file or directory`**。三个不可能同时成立 ⇒ 逐条查，结论是**前两个同源不同口径、第三个是我的命令根本没在 chroot 里跑**：
+
+| 视图 | 数出来的 | 为什么 |
+| --- | --- | --- |
+| `ls -1A /phone`（**含隐藏**） | **135** | 探针 33 用的就是这个口径，`## 下一步` 与 14.25 引的也是它 |
+| `ls -1 /phone`（**不含隐藏**） | **117** | `--status` 的口径；135−117 = **18** 个点开头的隐藏条目（`.DataStorage .android .estrongs .s_did .tcookieid .transforms` …） |
+| 我那条随手命令 | 0 / No such file | **引号塌了**：三层 `su -c "…--run '…'…"` 里我写了未转义的 `$(` ⇒ 命令被**宿主 shell** 求值，而宿主侧没有 `/phone` 这个挂载点。**这正是铁律 1 说的那件事**，我今晚又踩一次，只是这次症状是"文件凭空没了" |
+
+挂载本身三处一致，没有"随会话有/没有"这回事：本探针、引擎 17637、入口 17611 三个 `/proc/<pid>/mountinfo` 里那行**逐字符相同**
+（`31736 26159 254:74 /media/0 /phone rw,nosuid,nodev,noatime … f2fs /dev/block/dm-74`，命中各 1 行）；
+`/proc/17637/root/phone` 数出来也是 **117 / 135**，与我自己 shell 里一致。引擎的 `cwd = /phone`、`PWD=/phone`、`HOME=/root` ⇒ **它的家不是工作区，工作区是整机存储根**（#41 那条暴露面的现状描述，现在有引擎自己的 mountinfo 与 cwd 两个读数）。
+
+两条要留给他的：① **以后凡引这个数都带口径**，写"117（不含隐藏）/ 135（含隐藏）"，别再单独写"135 个条目"；
+② `p41.txt` 第 4 节把 135 个名字全列进来了（本地文件，不外传），里面有不少一看就知道是什么的私有目录与几个 `*_backup.img`、`wm_*dump.xml` ——
+**要不要改成只数不列，说一句我就改**（探针 33 那次我为"判引擎能看见多少"留着了名字，这次同一条理由成立，但他更在意就换）。
+
+**没做**：没重启引擎、没点「应用」、没在 App 里替他操作插件页；没删 `/root/dsh-plugins/` 那两份 tarball（`file:` 引用还指着它们）；
+没动 `runnerCommand`、档位、hosts 名单、自启；没重建 APK（这轮装的就是 14.23 那发 `152,167 B / sha 17c280ac…`，装机指纹见八末）；
+机上那 8 份 `.sh` 一份没删（分类与 md5 对账见本节上面：**8/8 与本地逐字节相同** ⇒ 删哪一份都还得回来 —— 要不要删，等他一句话）。
+新写的探针里只有 `probe36` 那条 `--dump-config` 在机上留下一次改写（`cordis.yml`，字节数没变），其余全只读；
+`probe39` 只写过自己那 `/tmp/p39_a`、`/tmp/p39_b` 两个 192 B 的临时件，**探针末尾自己删了并复查到"No such file"**。
+**等他三件事**：① 开 App 看那三处（插件页 / 侧栏市场入口 / 预设列表）；② purge 要不要点「应用」；③ 红队模式那套预设留不留。
+
+### 14.28 他回来报的两个症状：图标还是旧的那张（ launcher 缓存，不是装机件），市场一直转圈（病在解析＋区已钉死，两处都改了并当场换代引擎）（2026-10-21 晚 18:5x–19:1x，手机在场）
+
+他一句「我目前桌面上的 DSH 工作台，它的图标还是之前的那个图标……进去之后，那个插件市场里面一直显示正在加载插件目录，但是一直没有加载上」⇒ 一轮里两件事，**成因完全不同**，分开记。
+
+**一、图标那一格：装机件是新的，旧的是 launcher 的缓存（本轮我一行没动）**
+
+14.23 那张满幅图已经在机上了（`base.apk` 152,167 B / sha256 `17c280ac…bfc964cb`、`lastUpdateTime=2026-10-21 17:48:31`，见 14.27 八末的逐字节复点），我又在像素级验过 APK 里那几发 `ic_launcher.png` 确实是满幅那张。
+所以**桌面还显示旧图不是"没装进去"，是启动器的图标缓存不刷新**：缓存按 **包名 + versionCode** 认，这发还是 `versionCode 6`，`pm install -r` 同版本号重打一遍也不会换那张位图。
+给他的两条路（要付的代价不同）：① 他把桌面图标**删掉重放一次**（长按 App 图标拖到桌面 / 抽屉里长按拖出去），零改动、零风险；② 我把 `versionCode` 抬到 7 重打 APK，代价是那发 APK 的 sha 变了、报过的装机指纹作废，还要重装一次。
+**他挑了①「先重放一次图标」** ⇒ 本轮我没动 `app/`、没重打、没重装；这件事只剩他手上一动。
+
+**二、市场那一格：先按读数把根因钉死（探针 42，`downloads/p42.txt` 13,377 B，读数时刻 北京 18:44；里面那些失败行落在 18:37–18:40）**
+
+只读，一个字节没写。掉出来的四件事合起来正好解释"一直转圈"：
+
+| 读数 | 是什么 | 为什么关键 |
+| --- | --- | --- |
+| `state.json` 里 `"region":"global","regionAuto":true` | 下载区**早就定了并落了盘** | 源码 `lib/routes.js` 只在"没定过"的时候探一次，**定了就永不重探** ⇒ 它从此只按 global 那套地址去取目录 |
+| `log.ndjson` 里 **18 条 warn**（`level:info` 只有 2 行），detail 都是 `fetch failed (41–42s, 4 attempts)` | 他这一开页就连连失败 | detail 里列出的是两次 `awesome-dsh-plugin.com/plugins.json` 加一次 `npm:https://registry.npmjs.org/dsh-plugin-catalog`；`attempts=4` 对上 `lib/registry.js:187` 那句注释 **"Two attempts each"** ⇒ 两个源各两次 |
+| 那四个目录地址从 chroot 里 `HEAD` 全回 `code=000 dns=0.000000s total≈9.78s` | 一个都没连上，且**卡在解析那一步**（`dns=0` 是没解析成，不是超时） | **42 秒这笔账算得清了**：4 次 × 约 10.5 秒，那个 10.5 正是本机解析失败要等的时间（curl 独立量到 9.78 s）——**每次都在 15 秒那个 `HEADERS_TIMEOUT_MS` 到点之前就死了**，所以不是"网络慢被插件超时打断"，是**根本没解析出来**。14.22 那个解析病在市场上的复发 |
+| `/etc/hosts` 生效 27 条，里面 **没有** `awesome-dsh-plugin.com` / `mirrors.cloud.tencent.com` / `registry.npmjs.org` | 目录那三个 host **一条都没钉** | 钉了的（hf-mirror / gitee / npmmirror / modelscope …）都通，没钉的全死 ⇒ 病不在墙，在**名单缺这几条** |
+| `:3080` 上 `/dsh-market/status|registry|logs` 各回 **401 got=156B**；`:3081` 上 `status`/`registry` 两条同路径回 **404**（`logs` 那发没点） | 引擎那侧插件**挂得好好的**，404 是**门禁**按设计挡的（`dsh-entry.js:484-485`：不带口令一律 404 "Not Found\n"） | 排掉了"插件没装/没加载"这一整族假设 |
+
+顺手排掉的：`bundles` 里 `dshmarket` 与 `dshmarket-1.66.45.tgz` 都在、落盘 `package.json` version=1.66.45、`lib/registry.js` 与 `client/client.js` 在位 ⇒ **插件本体没问题**。
+
+**三、修法怎么选的：量了三条，不是挑最顺手的（探针 43，`downloads/p43.txt`，北京 18:49）**
+
+| 候选 | 读数 | 判法 |
+| --- | --- | --- |
+| 钉 `awesome-dsh-plugin.com` 进 hosts | 先 `--resolve` 打：`code=200 connect=0.109782s ttfb=0.387914s **got=4,072,995B**` | 通。**但它是 GitHub Pages 上那发 `plugins.json`，一次 4.07 MB 且没有缓存**（`region` 是 global，第一源就是它） |
+| 钉 `mirrors.cloud.tencent.com`（china 那套的 npm 出口） | DoH 给 3 条 IP，`--resolve` 后 `code=200 connect=0.024664s got=2,412B`（只取了元数据那一发） | 通，但要**他把下载区域改成"中国大陆"才走这条路**，我不动他的 UI |
+| 走 npmmirror 上那个目录包 | 元数据 `code=200 dns=0.000292s ttfb=0.184958s got=3,258B`，version `2026.1021.8781`，tarball 200 / **2,582,974 B / 1.53 s**；`registry.npmmirror.com` **hosts 里本来就有** | 通、**便宜**（2.58 MB 且有版本当作缓存校验），**但它只在 npm 那一源被问到时才起作用** ⇒ 要靠 `DSHM_NPM_MIRROR` 把"那套 npm 出口"指过来 |
+| 参考：`cdn.jsdelivr.net` | DoH 给 2 条 IP，`--resolve` 后 `code=000` | **钉了也连不通**，按 doh-hosts 的纪律归到 LIST_WATCH，不进钉名单 |
+
+他自己没在这三条里挑，说的是「**两个都弄，当场重启**」⇒ 于是做了两件事（钉 hosts + 写那行 env），然后一次引擎换代。
+
+**四、动了什么（两处都有备份、都有逐字节正证）**
+
+1. **`tools/doh-hosts.sh` 的 LIST_PIN 里加了 `awesome-dsh-plugin.com`**（附注释引探针 43 第 4 节，并写明"这条通了不代表 `raw.githubusercontent.com` 也通"），跑 `--sync`：备份 `/root/.dsh/hosts.bak.20261021-105919`（sha256 `adcc156a…cee7f5` 与机上那份逐字节撞）→ 写入 → 结果 **新增 1 条、本来就在 14 条、问不到 0 条**，钉的是 `185.199.108.153`。
+   钉完**不带 `--resolve`** 复点四条（`downloads/doh-sync-20261021-1904.txt`）：`hf-mirror.com` 200/0.235 s、`gitee.com` 200/1.360 s、`mirrors.aliyun.com` 301/0.078 s、`www.modelscope.cn` 302/0.174 s。
+2. **`/root/.dsh-env` 里加了一行 `export DSHM_NPM_MIRROR=https://registry.npmmirror.com`**（写在 `config/dsh-env`，理由整段落在文件里）。这台机器上这文件的**首次真正部署**顺手补了个工具：**`tools/deploy-env.sh`（新写）** —— 备份→sha256 撞了才写→两段式 push→落点 md5 复点→`--revert` 能逐字节还原，全程不打文件内容。
+   读数：机上原来 **1,687 B** ⇒ 换成仓库这发 **4,738 B**，md5 `61f6d0305adf044794dddaf08aedee3c`，`600 root:root`；备份 `/root/.dsh/dsh-env.bak.20261021-110024`（sha256 `2b216ca6…`）。
+   **→ 19:17 又推了一次（就地补）**：写完这节要给 `config/dsh-env` 补一段"当时机上还是旧发"的注释，本地就变 **5,567 B** ⇒ 顺手 `sh tools/deploy-env.sh` 再推一发，
+   `--check` 前后两次读数 **不等 → 逐字节相同（md5 `cd1ed15ca8eacaa7da1fdee7e0741ed0`）**，这一发的备份是 `/root/.dsh/dsh-env.bak.20261021-111700`（sha256 `770ba81a…`，就是那 4,738 B 那份）。
+   **这一发不改变生效状态**：多出来的全是注释，两个 export 一个没动，正在跑的第 4 代引擎（21363）当初就是从这个文件的 4,738 B 版 spawn 的 ⇒ **不用再重启一次**。
+   这条 `--check` 就是为"仓库改了机上没改"这种不对等准备的 —— 本轮它当场把 10-20 那份旧发抓了出来。
+   **顺带查出来一件事**：机上那 1,687 B 是 **10-20 那一发** —— 14.25 改的模板从来没推上去过。以前我写"改了 `config/dsh-env`"其实只改了仓库那半，设备上是空的 ⇒ 现在有了 `--check` 与这支部署器，这个不对等能主动量出来。
+3. **当场重启引擎**（探针 44，`downloads/p44.txt` 5,905 B，北京 19:08）。走的是最小那条：**只 SIGTERM 引擎，不动入口**（`scripts/dsh-entry.js:168-177` 自己有监管，2 s backoff 重拉，哨兵 `/root/.dsh/entry-stopped` 不在位）。
+
+换代这一记的完整读数（**"通"只认落字节，所以每条都带数**）：
+
+- 杀之前：cmdline 含 `dsh web` 的进程数 **= 1**（候选 `14851`，出生 10:35:33Z、已活 1,962 秒），入口 `17611` 出生 2026-10-20 13:27:14Z、已活 78,061 秒，`:3080`+`:3081` 监听命中 2。
+- `entry.log` 那五行是这条链路的正证：`11:08:17 第 3 代引擎退出 code=0 sig=null` → `11:08:17 2000ms 后重拉` → `11:08:19 第 4 代：spawn bash -lc <. /root/.dsh-env …; exec dsh web --no-open --host 127.0.0.1 --port 3080>` → `11:08:22 认到第 4 代启动行` → `11:08:22 凭据已换取 cookie=dsh-auth-VPhEE…（长度 224），http=303`。
+- 杀后第 5 秒：新 pid `21363` 已在，`:3080` 还没起（命中 0）；第 10 秒命中 1 ⇒ **换代 14851 ⇒ 21363，全程 10 秒**。
+- 新引擎 `/proc/21363/environ`：**`DSHM_NPM_MIRROR=<有值>`、`DSHM_` 键计数 = 1**、`DSH_PERMISSION_MODE` 命中 1、`cwd=/phone`、入口仍是 17611（**他那条入场链接与门禁都没废**）。
+- 换代后 `:3080` 上两条市场路由仍 **401 got=156B** ⇒ 插件重新挂上了。
+- 解析层**不带 `--resolve`** 复点：`awesome-dsh-plugin.com/plugins.json` HEAD `code=200 dns=0.000286s ttfb=0.578306s`（`dns` 几乎为零 = 命中 hosts），`registry.npmmirror.com/dsh-plugin-catalog/latest` `code=200 dns=0.000295s ttfb=0.178842s`。
+
+**五、为什么这两处就够、不点"中国大陆"也能加载（源码层，读的是电脑上那发 `dshmarket 1.66.45`）**
+
+`lib/regions.js:88-116` 把两个区各自的目录源写死了：global 只有 `{kind:'url', url:CATALOG_OFFICIAL}`（=awesome 那发 4 MB），china 是 `{kind:'npm', registry:NPM_CHINA}` + 同一个 url。
+关键是 `catalogSourcesFor(region)`（`lib/regions.js:136-144`）：**如果这张表里还没有"本区 registry 上的目录包"，就在末尾追加一条 npm 源**，注释里写清了为什么要追加 —— 目录挂在**第二个可被单独封的 host** 上，而探测只量 npm registry，所以"registry 很快而 GitHub Pages 被封"的网络会被判成 global、然后永远失败（**与我们这次的形状一模一样**，只是反过来了）。
+再一层：`routesFor()` 在 `lib/regions.js:233-236` 用 `override(env,'DSHM_NPM_MIRROR')` 覆盖 `npmRegistry`，**读的是 `process.env`** ⇒ 那条追加的 npm 源在 global 区也不再指向死掉的 `registry.npmjs.org`，而是 **npmmirror**（hosts 里本来就有、探针 43 量过 1.53 s / 2.58 MB）。
+所以修完的 global 区是：**第一源 awesome 现在解析得开（钉了），第二源 npmmirror 目录包可达且便宜（env 指过去）**；`DSHM_NPM_MIRROR` 不改 `region`、不需要他点 UI。
+**还留着的那笔账（要不要动归他）**：global 的第一源是**每次重新取、无缓存的 4 MB**。他把设置里「下载区域」从 **全球** 改成 **中国大陆**，第一源就变成那条**按包版本校验的 2.58 MB npm 路径**（`lib/catalog-npm.js` 用 package version 当缓存校验），省的是重复流量；代价是 china 那套还会把 GitHub 的 raw/git 走 `gh-proxy`。这一下要点的是他 App 里的设置，**我不替他点**。
+
+**六、这一格还没闭环的那一半（说清楚，别把"没报错"当通过）**
+
+`log.ndjson` 到探针 44 为止**仍是 6,606 B、改于 10:40:50Z（=北京 18:40:50）**，`state.json` 也仍是 `"region":"global"` —— 因为**换代之后没人再请求过目录**（引擎只在页面打开时取）。
+⇒ 现在能说的是"两处都改到位、目录那两个 host 现在从 chroot 里取得开"，**不能说"市场页已经能加载出来了"**。那一格要他**在 App 里打开插件市场**才算：成了我把这节的最后一条读数补上；还是转圈，`log.ndjson` 一定会写新行，我按新行继续查（新行长什么样就是下一个根因）。
+
+**→ 19:17:54 又复点一次（探针 45，`downloads/p45.txt`，纯只读、没发任何会取目录的请求）**：引擎第 4 代 **21363 活着 575 秒**、入口 `17611` 未动、`:3080`/`:3081` 监听命中 2；
+`log.ndjson` **仍是 6,606 B / 20 行 / 改于 10:40:50Z**，列一下是 `"level":"info"` 2 行、`"level":"warn"` 18 行、`catalog fetch failed` 4 行 —— **一个字节没长 = 他还没打开过页面**，这一格照旧欠他一眼。
+顺带复点：`hosts 生效行数 = 28`（14.28 钉之前那发 p42 数的是 27，多出来的正是 `awesome-dsh-plugin.com 185.199.108.153`），`registry.npmmirror.com 111.62.184.148` 仍在表里。
+**这一发又抓出自己的一个坑（就地记）**：把 §4 那张全表从读数里抽回 PC 时，我写的正则字符类是 `[a-z0-9_.]`、**少了连字符** ⇒ `wifi-aware0` 那行被无声丢掉，抽出 29 行 vs 基线 30 行。
+字节上没影响（那条 rx/tx 都是 0，差集一字不差），但**"少一行"要是发生在有流量的接口上，合计就悄悄错了** ⇒ 抽名字一律用 `[^ ]+`，抽完**比两侧名字集合**（`diff <(cut -d' ' -f1 基线 | sort) <(cut -d' ' -f1 现值 | sort)`），别只比行数。
+
+**我自己在这轮抓出来的五个坑（都就地改了，别当成设备的问题）**
+
+1. **`who()` 把"活着多少秒"算成了 -3 秒**：`UP`（uptime）是在脚本开头取的一次快照，而新引擎出生在那之后 ⇒ `UP − ST/HZ` 变负。**出生时刻可以用开机后秒数反推，年龄必须在打的那一刻重新读 `/proc/uptime`**。已就地改（`scripts/dsh-engine-restart-and-verify44.sh` 里带箭头注释）。这是 14.27 那条"第 22 字段减法用反"的**同族第三种形状**。
+2. **基线文件不在同一个 `/tmp`**：18:56 那份 `/proc/net/dev` 全表是我在 **PC 的 git-bash `/tmp`** 里重定向存的，探针第 9 节去查的是**手机 chroot 的 `/tmp`** ⇒ 设备侧永远报"基线不在"。这轮差集在 PC 上算，基线也抄进了项目：`downloads/net-full-20261021-185612.txt`（`名字 rx tx` 三列 × 30 行）。**两个 `/tmp` 不是一回事**，与设备侧两套路径是同一族。
+3. **回环不能进出网**：`lo` 的 rx 与 tx **同值**（同一批字节被两侧各计一次），这一窗口 +993,930/+993,930 ⇒ 全表求和会把它双计、且它根本不是出网。出网只认 `wlan*` / `rmnet*`。
+4. **差集那格 awk 第一版列又用错了**：`$4−$2` 里 `$4` 是第二个快照的接口名字符串 ⇒ 负数（14.27 之后又犯一次）。列口径写进注释：`rx=$2 tx=$10`。
+5. **差点把 env 的值打出来**：探针第 3 节第一版写的是 `grep '^export' | cut -d= -f2` —— 那是**取等号右边**（值），跟注释里的"只列键名"正好相反，`/root/.dsh-env` 以后放 key 就会被打进读数文件。改成 `sed -n 's/^export \([A-Za-z0-9_]*\)=.*/\1/p'`。**凭证纪律要靠代码兜，不能靠我记得**。
+   同时给"杀进程"补了数量门槛：**cmdline 含 `dsh web` 的进程数恰好 = 1 才杀**，且断言入口非空、非同一 pid（这一条是待办 #45 要的形状，本轮顺手做了探针侧，`dsh-entry.js` 里还没做）。
+
+**这轮流量（窗口 = 北京 18:56:12 → 19:08:16，12 分 04 秒；差集，PC 上算，口径 `wlan*`+`rmnet*`）**
+
+| 接口 | rx 增量 | tx 增量 | 合计 |
+| --- | --- | --- | --- |
+| `wlan0` | +1,021,561 B | +308,410 B | **1,329,971 B** |
+| `rmnet_ipa0` | +1,986 | +3,842 | 5,828 B |
+| `rmnet_data0` | +97 | 0 | 97 B |
+| `rmnet_data4` | +1,149 | +3,458 | 4,607 B |
+| `rmnet_data1/2/3` | 0 | 0 | 没动 |
+| **出网合计** | | | **1,340,503 B ≈ 1.28 MiB**（其中蜂窝 10,532 B ≈ 10.3 KiB，其余走 WiFi） |
+
+窗口里装的是这几件事：`doh-hosts.sh --sync` 与它钉后不带 `--resolve` 的四发验收、`deploy-env.sh` 部署（`adb push` 走 USB 不进这张表）、探针 44（含 awesome 的 HEAD 与 npmmirror 元数据、换代后两发 401）。**没有下载过那 4 MB 正文**（HEAD 与元数据而已），也没有下过目录包 2.58 MB。
+`lo` 那 +993,930/+993,930 没算进来（见上面第 3 条坑）。
+
+**→ 收尾又点了一发，同一基线的第二个窗口（18:56:12 → 19:17:54，21 分 42 秒；现值存 `downloads/net-full-20261021-191754.txt`，30 个接口与基线名字集合逐个对上）**：
+`wlan0` +1,155,024 / +402,940 = **1,557,964 B**、蜂窝三条合计 **34,934 B**（`rmnet_ipa0` 19,173、`rmnet_data4` 15,568、`rmnet_data0` 193；`rmnet_data1/2/3` 没动）⇒ **出网合计 1,592,898 B ≈ 1.52 MiB，WiFi 占 97.8%**。
+第二个窗口比第一个多的 **252,395 B** 归属拿不到：那 9 分 38 秒里我这边只有 `deploy-env.sh` 的两次 `--check` 加一发部署（`adb push` 走 USB，不进这张表）和探针 45（纯只读、不发任何外部请求），
+⇒ 这 252 KB **不是我这轮点出来的**，最可能是手机自己的后台（他人在旁边、屏幕状态未知）。**这类对不上号的增量就照实写"归属未定"，别顺手套到自己头上。**
+**以后报流量的写法**：一份基线可以开多个窗口，但**每个窗口都要单独写起止时刻与"这段里装了哪几件事"**，别把两个窗口的数混成一个"这轮用了多少"。
+
+**退回路径（都是逐字节还原，还原后都要再重启一次引擎才吃得进 —— 入口只在自己 spawn 那一次 source）**
+
+- hosts：`bash /root/doh-hosts.sh --revert /root/.dsh/hosts.bak.20261021-105919`
+- env：`sh tools/deploy-env.sh --revert /root/.dsh/dsh-env.bak.20261021-110024`（那次中断的尝试还多留了一份同内容备份 `…-110100`，两份都在机上，还原用哪份都行）
+- 引擎：不用退 —— 换代本身没有副作用（`dsh-entry.js` 一直是那份，cookie 自动重换）。
+
+**没做**：没重打 APK、没抬 `versionCode`、没重装那发 152,167 B 的件；没点 App、没替他开任何页面、没改「下载区域」；没动 `runnerCommand`、档位、自启；没 `apt install` 任何包；没 reboot；没碰 `/data/local/tmp` 他那批与 KernelSU 配置；探针 44 之后 chroot `/root` 里 `.sh` 仍是 **8 份**（`run-probe.sh` 收尾数的，自己那份当场删了）。
+
+**等他两件事**：① 把桌面图标删了重放一次（他挑的那条），看那张满幅图；② **在 App 里打开插件市场**，把结果告诉我 —— 好了我补最后一格读数，还转圈我就按 `log.ndjson` 的新行继续查。
+
+
+### 14.29 他一句"提交到我的 GitHub 仓库里去，权限是私密的"：本目录从此是独立 git 仓（历史从工作区仓 split 出来），过程中我自己把父仓的分支挪走了一次（2026-10-21 晚 19:2x–）
+
+**先查现状，不查就会推错东西**。三条读数决定了这一步该怎么走：
+
+| 查的 | 读数 | 所以 |
+| --- | --- | --- |
+| `git remote -v`（`D:\mycode`） | **回空** | 工作区仓从没配过远程，"提交"≠"上传"，得先建库 |
+| `git rev-list --count HEAD` / `git log --oneline -- dsh-mobile \| wc -l` | **227** / **5** | 一个仓里躺着他所有项目；碰过本项目的只有 5 发 |
+| `gh repo list zhl110` | 8 个库：`agent-hub`/`litellm`/`speaknow` **PRIVATE**，`speakmore-windows`/`shen-shuo-z`/`chat-archive-zhl`/`memory-workstation`/`voice-input-zhl` PUBLIC，**没有 dsh-mobile** | 他的习惯是一项目一库；新建 `dsh-mobile` 私密库是照这个形状走，不是我另起一套 |
+
+顺手认了两条容易踩的：`gh` 现在用的是 **fine-grained PAT**（`github_pat_…`，Git 协议 https），而 `agent-hub` 的 remote 是 **SSH**（`git@github.com:zhl110/agent-hub.git`）⇒ 两条认证路径不是一个东西，别拿一条的成功推另一条的可行。
+
+**推之前先体检内容**（这一步是"私密库也是公开给未来的一次泄露"）：`git add --dry-run -- dsh-mobile` 回 **34** 个新件，加已跟踪的 109 = **143** 个文件、新增那批 **15.2 MB**，最大四张都是图标 PNG（各约 3.8–4.0 MB）。
+**→ 这三个数当场作废，按暂存后的真读数改口（别抄我第一版）**：`git add --dry-run` 对"要改的**已跟踪**文件"也打一行 `add '…'` ⇒ 那 34 行**不是 34 个新件**，而是 **新增 23 + 修改 11**；
+把它们与 109 相加得出的 "143" 是**我自己造的重叠计数**（那 11 个修改件本来就在 109 里）。暂存后的真数：本仓跟踪 **132** 个文件（109 + 23，`git ls-files | wc -l`）、这 132 个在工作树里合计 **15.7 MB**、
+本轮**新增那 23 件 = 11,302,343 B ≈ 10.78 MB**（我第一版那个 15.2 MB 是把 RUNBOOK/PROGRESS 这些修改件的现值一起算进去了）。
+**这类"两份清单拼起来数行数"的坑与本项目老坑同源（列语义没先确认）**：`git add --dry-run` 的行数不等于"新件数"，认新件只认 `--diff-filter=A`。
+凭证扫法与结果：
+`sk-…`/`api_key=<长串>`/`ghp_`/`github_pat_`/`BEGIN … PRIVATE` 这些式样在待推件里**零命中**；`config/dsh-env` 里唯一一条 20 字符以上的值是 `DSHM_NPM_MIRROR=https://…`（我今晚刚加的那行，本来就不是秘密）；
+`dsh-auth-[A-Za-z0-9]{20,}` 只命中 **1** 处 —— `scripts/dsh-entry.js:625`，读上下文是**自测假上游**里那串 `dsh-auth-aaaa…`（fixture，不是真 cookie）。
+门禁钥匙 `entry.key` 在文档与脚本里只以**路径**出现，值从没落进文本。`downloads/`（全部读数与日志）被 `.gitignore` 挡在库外。
+两条与 LFS 有关的读数：这台机的 git 配了 `filter.lfs.*`（`required=true`），但 `git check-attr filter` 对 PNG 回 **unspecified**，且 `cat-file` 打出来的是 `\211PNG\r\n\032\n…IHDR` 真字节 ⇒ **库里没有 LFS 指针件**，GitHub 那边不需要 LFS 存储配额。`.gitattributes`（本目录那份，钉 `*.sh/*.js/*.md/config/dsh-env` 为 LF、PNG/APK/JAR/KO 为 binary）会跟着进去，这是对的。
+
+**他点的三条**（AskUserQuestion，一次问完）：① 内容边界 = **只推 dsh-mobile，新建私密库**（不推整个工作区）；② 本地管法 = **在本目录建独立仓**，照 `agent-hub` 那个"父仓照样跟踪文件 + 子目录自己有 `.git`"的形状，以后一条 `git push` 就走；③ **《手机端情况.md》一起推**（5,602 B，设备型号/容器结构/哪些域名不通，无私密凭证）。
+
+**做法（历史要留住，不能只推一发 initial commit）**
+
+1. 父仓里 `git subtree split --prefix=dsh-mobile -b dsh-mobile-split` ⇒ 跑了 **49 秒**，出分支 `8e8706f6`。
+2. 对账（铁律 2 那套"只认逐行相加"）：`rev-list --count` = **5**；顶层形状已是项目内相对路径（`.gitattributes AGENTS.md app config reference scripts tools …`，没有 `dsh-mobile/` 前缀）；
+   名字数 **split=109 / 父仓 HEAD 内 dsh-mobile=109**；`diff` 两份**名字+blob 号双列**清单 ⇒ **空输出**（109 个文件的 blob 逐一对上）。
+   中途我第一版对账写成 `git diff dsh-mobile-split HEAD -- dsh-mobile`，它把 109 个文件全报成"变更"—— 那不是内容差异，是**跨两种树形比路径**（split 的根就是项目内容，父仓那边还带 `dsh-mobile/` 前缀），这种比法本身不成立，作废。
+3. 本目录 `git init --initial-branch=main` → `git remote add parent /d/mycode` → `git fetch parent dsh-mobile-split` →
+   `update-ref refs/heads/main <sha>` → `symbolic-ref HEAD refs/heads/main` → `git reset --mixed`（**不带 --hard**）。
+   最后那步只把 **index** 换成 split 的树，工作树一个字节不动 ⇒ 今晚那批未提交改动原样留着。核对：toplevel=`D:/mycode/dsh-mobile`、提交 **5**、已跟踪 **109**、脏项 **改 11 / 未跟踪 22**（与父仓视角对本项目的读数一致）。
+
+**我自己这一发事故（本轮最该记的一条，`downloads/` 里没有它，只在 git reflog 里）**
+
+上面第 3 步我第一遍写的是 `git init -q --initialBranch=main .` —— **选项名少一个连字符**，`git init` 直接报错退出。
+我那一串命令是用 `;` 串着写的，于是**后面的 `remote add` / `update-ref` / `symbolic-ref` / `reset --mixed` 全跑了**，而彼时 `dsh-mobile` 里还没有 `.git` ⇒ git **往上找到了父仓**，四条命令全打在 `D:\mycode` 上：它的 `main` 被我挪到 split 那一发、index 被 reset 成 split 的树（根级 `AGENTS.md`、`PROGRESS.md` 那批）。
+症状是我照常往下读，读到 `git log --oneline` 只剩 5 发、`rev-list --count HEAD` = 5 —— 数字对不上才回头查 `--show-toplevel`，回的是 `D:/mycode`。
+还原：`update-ref refs/heads/main 175bcfbf…`（原值从 `git reflog show main` 拿到）→ `symbolic-ref` → `reset -q --mixed` → `remote remove parent`。
+还原后读数 **`HEAD=175bcfbf`、`rev-list --count=227`、`remote` 空**，本项目脏项 **11 改 / 22 未跟踪**（与事故前那条计数一字不差）；全仓脏项 577 项也照在。
+**代价只有两件事**：① 他若原本在暂存区里放了东西，`reset --mixed` 会把它**打回未暂存**（文件内容一字未动，blob 都在盘上）；② 我多花了一轮来写这段。
+两条规矩已进 AGENTS 铁律 9：**建仓这种"前一条不成功后一条就不该跑"的动作用 `&&` 串并留 `[ok]` 回声，别用 `;`**；**挪分支之前先把 `rev-parse HEAD` 与 `rev-list --count HEAD` 打出来**，别到时候只能靠会过期的 reflog 找回原值。
+
+**推送与验收（这一格等 push 回来填死）**：`gh repo create zhl110/dsh-mobile --private` → 加 `origin` → `git push origin main`。
+认的是三个数：**本地 `rev-list --count HEAD`** = **远端 `rev-list --count origin/main`** = split 后的发数 + 本轮提交；`gh repo view --json visibility` 回 **PRIVATE**；
+远端树里文件数 = 本地 `git ls-files | wc -l`。

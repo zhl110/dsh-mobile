@@ -29,7 +29,13 @@ github.com codeload.github.com objects.githubusercontent.com
 registry.npmmirror.com cdn.npmmirror.com
 mirrors.tuna.tsinghua.edu.cn deb.debian.org
 hf-mirror.com www.modelscope.cn modelscope.cn gitee.com mirrors.aliyun.com
+awesome-dsh-plugin.com
 "
+# awesome-dsh-plugin.com 是 2026-10-21 晚上加进来的（探针 43 第 4 节实测，读数 downloads/p43.txt）：
+# dshmarket 那份插件目录 plugins.json 就挂在这个域名上，它拿 DoH 给的 GitHub Pages IP（185.199.108–111.153）
+# 绕开解析直连是**通的**：code=200、connect 0.110 s、ttfb 0.388 s、正文 4,072,995 B。
+# 注意它和 LIST_WATCH 里那台 raw.githubusercontent.com（185.199.108.133，0.118 秒直接失败）不是同一回事：
+# 同一段 Pages IP 池，一个连得上一个连不上 ⇒ 这条只能算"这个 host 实测通"，不要外推成"Pages 都能通"。
 LIST_WATCH="raw.githubusercontent.com registry.npmjs.org ports.ubuntu.com archive.ubuntu.com security.ubuntu.com cdn.jsdelivr.net"
 LIST_DEFAULT="$LIST_PIN $LIST_WATCH"
 DOH=https://223.5.5.5/resolve
