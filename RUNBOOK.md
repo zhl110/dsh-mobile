@@ -1402,3 +1402,7 @@ recommends 各批多拖进来的差集：**77 / 0 / 40 / 49 个**（52.3 / 0 / 2
 两边 `git status --short -- .` 都回 **0 行**，`RUNBOOK.md` / `config/dsh-env` / `手机端情况.md` 三件的 blob 号在「工作仓树 = 父仓树 = 盘上 `git hash-object`」三处**全等**（`b8d0945a` / `dfe8cd8d` / `9a3512c8`，含那件 CJK 文件名的）；
 身份走单发 `-c user.name/-c user.email`，**没改 git 配置**。**没 push**（他这轮只说"提交"）⇒ 23:19 当场 `git rev-list --count origin/main..HEAD` = **2**（`6338ab9` + 号回填那发），远端仍停在 `22faf1d`；**这个数只认当场跑命令，别把文档里的当恒等值**（写这句话的这一发本身会再 +1）。
 **→ 23:2x 收尾**：工作仓三发 `6338ab9` / `c02e4ab` / `a1bf414`，父仓三发 `3dd37f49` / `b97d05a` / `24f4d5c7`；两处"没查就写"（`c02e4ab` 正文的归属、`24f4d5c7` 正文里那个编出来的前缀"641…"，真号 `a1bf414`）都**不 amend、只在这里更正**，规矩进 AGENTS.md 已知坑。
+**→ 10-22 00:0x 他说「提交并推送」**：归因改口那一发 = 工作仓 **`198c49a`**（AGENTS.md / PROGRESS.md / RUNBOOK.md 三件，`+16 / −1`），父仓 **`18039cd8`**（同三件，pathspec 带 `dsh-mobile/`）。
+**推完 198c49a 那一刻**当场复点三个数：`rev-list --count origin/main..HEAD` = **0**、`git ls-remote origin refs/heads/main` = `198c49a67779ee…` **与当时 `rev-parse HEAD` 同一个号**、
+`198c49a` **那一发**三份文件 blob 号在「工作仓树 = 父仓树 = 盘上 `git hash-object`」三处全等（`64304319` / `f0190657` / `e1e9f587`；本行这发回填会让 RUNBOOK 自己变号，按上一条那句规矩——只认当场量，不拿文档当恒等值）。
+**父仓 `D:\mycode` 没有 remote**（`git remote -v` 当场 0 行）⇒ 这轮"推送"只发生在工作仓，父仓 `18039cd8` 仍是本地件（AGENTS.md 已知坑那条"提交≠上传"在这儿第二次撞上，读数一样）。
