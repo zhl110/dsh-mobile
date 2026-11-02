@@ -11,7 +11,8 @@
 #       本脚本只做 PC 侧的事：推脚本、收字节、本机压缩、两道闸门、指纹与元数据、超档切卷。
 #
 # 两条硬规矩：
-#   1) 凭证与这台机上的用户数据不进包。闸门一 = 出包前设备侧内容普查（有命中就停）；
+#   1) 凭证与这台机上的用户数据不进包。闸门一 = 出包前"已知凭证串回归"（从 entry.key / .dsh-env /
+#      llm-deepseek 取真串，回扫保留集；命中就是真泄露，不命中才算过。词形普查只作参考，见设备侧第 5 节注释）；
 #      闸门二 = 出包后对**成员名单**再扫一次敏感名（命中就停，不推）。
 #   2) 报数只认同源：条目数从同一条流算两次（raw 与 gz 各数一遍，必须相等），不拿另一套 find 口径去凑。
 #
@@ -43,6 +44,10 @@ CHRUN() { "$ADB" shell "su -c \"$RUNNER --run 'bash /root/$DEVNAME $1'\"" </dev/
 [ -f "$SCRIPT" ] || { echo "!! 缺设备侧那一半：$SCRIPT"; exit 1; }
 bash -n "$SCRIPT" || { echo "!! $SCRIPT 语法不过"; exit 1; }
 CR=$(tr -cd '\r' < "$SCRIPT" | wc -c); [ "$CR" = "0" ] || { echo "!! $SCRIPT 有 $CR 个 CR，先 dos2unix"; exit 1; }
+if [ "$MODE" != "--dry" ]; then
+  echo "== -1 先在本机把闸门自测一遍（同一份脚本，三种形状：埋雷要抓到 / 撤雷要 0 / 凭证源空要报"取不到串"）"
+  bash "$SCRIPT" --selftest || { echo "!! 闸门自测不过 —— 闸门本身坏了，这时候的"0 命中"不作数，不出包"; exit 1; }
+fi
 "$ADB" get-state >/dev/null 2>&1 || { echo "!! 设备不在 device 状态"; exit 1; }
 
 echo "== 0 送设备侧脚本并逐字节撞 md5"
@@ -61,13 +66,16 @@ if [ "$MODE" = "--dry" ]; then
   exit 0
 fi
 
-echo "== 1 出包前普查（闸门一：有敏感形状命中就停，不靠事后补救）"
+echo "== 1 出包前普查（闸门一：这台机真在用的凭证串若在保留集里出现，就停，不出包）"
+# 判据是设备侧脚本第 6 节"已知凭证串命中"（从 entry.key / .dsh-env / llm-deepseek 取真值再回扫保留集）。
+# 不再拿第 5 节的词形命中当闸门：2026-11-02 在本机同型 profile 树上量到 password 43 个文件、sk- 26、Bearer 13
+# 全是上游 js 的字段名与 hash —— 用词形当闸门会永远出不了包（假阳性卡死），见那份脚本头注释。
 CEN=$(CHRUN --census)
-printf '%s\n' "$CEN" | sed -n '/^== 5/,/合计命中文件/p' | sed 's/^/  /'
-N=$(printf '%s\n' "$CEN" | sed -n 's/^  合计命中文件 : \([0-9]*\).*/\1/p')
-[ -n "${N:-}" ] || { echo "!! 没读到普查计数（设备侧那一半跑坏了），不出包"; echo "$CEN" | tail -20; exit 1; }
-[ "$N" = "0" ] || { echo "!! 普查命中 $N 个文件：把它们加进设备侧 DROP/DSH_KEEP 再重打，别继续。"; exit 1; }
-echo "  [ok] 数据面内容普查 0 命中"
+printf '%s\n' "$CEN" | sed -n '/^== 6/,$p' | sed 's/^/  /'
+N=$(printf '%s\n' "$CEN" | sed -n 's/^  已知凭证串命中 : \([0-9]\{1,\}\).*/\1/p' | tail -1)
+[ -n "${N:-}" ] || { echo "!! 没读到闸门计数（设备侧那一半跑坏了，或一个凭证串都没取到 ⇒ 那不算通过），不出包"; echo "$CEN" | tail -20; exit 1; }
+[ "$N" = "0" ] || { echo "!! 保留集里命中 $N 个文件带真凭证串：把它们加进设备侧 DROP/DSH_KEEP 再重打，别继续。"; exit 1; }
+echo "  [ok] 已知凭证串回归 0 命中"
 
 mkdir -p "$OUTDIR"
 RAW=$OUTDIR/.packing.tar
@@ -119,7 +127,7 @@ META=$OUTDIR/payload-meta.txt
   echo "dpkg ii 数    : $(mget dpkg_ii)"
   echo "cordis 字节   : $(mget cordis)"
   echo "hosts 钉的行  : $(mget hosts)"
-  echo "普查          : 出包前数据面内容 0 命中；出包后名单 0 命中（两道闸门）"
+  echo "闸门            : 本机自测 3/3 通过；出包前已知凭证串回归 $N 命中；出包后名单闸门 0 命中"
   echo "剥除清单      : 见 scripts/dsh-payload-pack.sh 的 DROP / DSH_KEEP（单一真源，本文件不抄第二份）"
   echo "保留 /root/.dsh: speech-to-text（离线模型）、profiles（层栈）、dsh-purge（备份目录）"
   echo "明确不含      : entry.key、/root/.dsh-env 与它的备份、任何 provider 的 API key、会话/附件/storages/日志、缓存、/tmp、/phone、frida"

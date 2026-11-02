@@ -1,7 +1,26 @@
 # dsh-mobile — 项目目标与进度
 
 > **接班先读这一段（2026-10-21 深夜改写，给冷启动的人）**
-> **最新一格是状态 38**（他两句："把引擎、Ubuntu rootfs、Node、dsh 本体，全部提交到仓库里，让他们即装即用"＋"你不用问我，你就直接做完，做到最后打包完结束之后，你再跟我说"。北京 11-02 22:0x–23:5x，手机**前半程**在场）：
+> **最新一格是状态 39**（他一句："那你就先打包一个 release 出来，然后上传上去。" 北京 11-02 深夜到 11-03 凌晨，**手机不在场**）：
+> **包还是没打成，而且是硬卡**：`adb devices -l` 一直是 `f22aa1e1 offline`，`reconnect offline` 后条目直接消失，`kill-server`/`start-server` 两轮、
+> 4×12 秒轮询、`mdns services`（空，机上没开无线调试）都没救回来；`Get-Process` 复点机器上**只有一发 adb**（pid 53652，不存在两个版本抢 5037），
+> 而 Windows 侧 `VID_22D9` 三条都是 `OK`（ADB Interface / USB Composite / WPD 一加 13）⇒ **手机侧那条调试会话掉了，PC 侧没有能自己按的按钮**。
+> 也量过"PC 上有没有现成的一份可以替着打包"：三处目录 `+50M` 只回他的 `stock_boot.img` 与别项目的 `sokuji.tar.gz` ⇒ **rootfs 只在那台机上**。
+> **这段时间把唯一还能推进的一格推了：Release 上传权限 + 闸门一重估。** ① 权限用一发 80 B 的 canary 量死 ——
+> `gh release create --draft` 退出码 0、`view --json assets` 读回 `size=80 / digest sha256:1f000dd…`、`gh release delete --yes` 后 `releases` 长度复点 **0**，
+> ⇒ **建 Release 与传资产都有权**，真包出来直接推（小坑：资产名不能以 `.` 开头，gh 会改成 `default.xxx`）。
+> ② 闸门一原来判"词形"（扫 `password|secret|sk-|Bearer ` 这类词）在本机同型 profile 树上**必然误报**：`password` 43 个文件、`sk-` 26、`Bearer ` 13、`secret` 28，
+> 一条真凭证都没有；换成猜"值形状"也不成（`sk-[0-9a-f]{32}` 整棵 `~/.dsh` **0 命中**，`AKIA…` 反倒在 PIL 与 pnpm 里误报 2 发）。
+> ⇒ **判据换成"已知凭证串回归"**：从 `entry.key` / `.dsh-env` 的每个值 / `llm-deepseek` 里取真串（只进内存、绝不打印），回扫保留集；
+> 顺带抓出一条**会永久出不了包的死锁** —— 旧版扫的是活盘，会把**脚本自己**（里面就写着这些词）和已剥掉的 `.bash_history`/`.dsh-env` 算成命中。
+> 扫描面改成从"与 `tar --exclude` 同源的那份保留清单"里筛，普查范围与包体范围从此恒等。
+> ③ 新闸门**不需要手机就能验**：`bash scripts/dsh-payload-pack.sh --selftest` 今晚本机实跑 **合计 3 条：PASS 3 / FAIL 0**
+> （埋雷要抓到 / 撤雷要 0 且当场取到过串 / 凭证源为空要明确报"取不到串"而不是蒙成 0），`make-payload.sh` 出包前先跑它一次。
+> 名单闸门（闸门二）也单测了一发：**必须命中的 15 条漏 0、故意保留的 7 条误伤 0**；计数解析器三种输入形状都对。
+> **出包前还差一格判断**：`/etc/shadow` 里 root 有没有哈希今晚拿不到（那要在机上跑第 4 节）——**有哈希就不能随包走**，这是打包前的最后一道内容关。
+> **我这轮没做什么**：没打成包、没建 Release；`install-from-scratch.sh` 仍一行都没实机跑过；新判据**在真机上一次都没跑过**（只在 PC 同型树上验的）；
+> `/usr` 那 1 GB 多没扫；他的东西一个没碰、没 reboot、没装包、没重启引擎、没改 git 配置。全文 **RUNBOOK 14.38**。
+> 上一格是**状态 38**（他两句："把引擎、Ubuntu rootfs、Node、dsh 本体，全部提交到仓库里，让他们即装即用"＋"你不用问我，你就直接做完，做到最后打包完结束之后，你再跟我说"。北京 11-02 22:0x–23:5x，手机**前半程**在场）：
 > **先给判据（这是决定形状的那一句）**："提交进 git"这条路**不通不是因为配额，是因为格式装不下** —— git 树对象没有 uid/gid 字段、没有 setuid/setgid 位：
 > 这棵树实测 root:root **119,474** 个、1001:1001 **6,194** 个、setuid/setgid **17** 个（`passwd`/`su`/`mount` 那一族），整树 **4,554,034,779 B**（`downloads/p89.txt`）。
 > checkout 出来属主全变、那两位全丢 ⇒ chroot 里起不来。**我第一版把"设备节点存不了"当决定性证据，那条被读数推翻**：`/dev` 是运行时 tmpfs，本来就不在树里。
@@ -1286,6 +1305,13 @@ npm 侧一条要看清：**包名不是 `dsh-market` 而是 `dshmarket`**（npmm
     **包没打成、Release 没建** —— 因为手机在 11-02 那一轮中途掉回 `offline`。他那边要做的只有一件：**重插 USB / 在弹窗里勾"一律允许"**（或撤销调试授权后重授）；
     `adb devices` 回到 `device` 之后就是两条命令：`bash tools/make-payload.sh --dry`（先看普查有没有敏感形状命中保留集）→ `bash tools/make-payload.sh`（出包 + 两道闸门 + `SHA256SUMS`/`payload-meta.txt`），
     然后 `gh release create` 把那一发挂上 `zhl110/dsh-mobile`。**下一步之后还欠两格**：① `install-from-scratch.sh` 从没实机跑过（要第二台机或干净 rootfs）；② Release 传得上去何等速度未验（那把 fine-grained PAT 能读能建库，**资产上传权限本轮没测到**）。
+    **→ 状态 39 更正两条（旧话不删）**：② 那格今晚量掉了 —— canary 一发 80 B 资产**上传成功**（`gh release view --json assets` 读回 `size=80`），建/删 Release 都有权，只剩"GB 级要多久"没量；
+    ① 那句"先看普查有没有敏感形状命中保留集"**判据作废**：词形普查在本机同型树上必然误报（`password` 43 个文件），闸门一现在是"**已知凭证串回归**"，
+    并且出包前会先在本机跑 `bash scripts/dsh-payload-pack.sh --selftest`（今晚 **3/3 PASS**）。
+41. **手机回来之后，出包前只有一格还需要判断**（状态 39，RUNBOOK 14.38 八）：`--census` 第 4 节会报 `/etc/shadow` 里 root 那栏**有没有哈希**。
+    "锁定/无哈希" ⇒ 可以随包走；"**有哈希**" ⇒ **不能随包走**（GB 级产物一旦公开，离线爆破是他机上那把锁的事），要在设备上把 root 栏改成 `!` 再打 ——
+    那是**改机上系统文件**，做之前先备份、改完逐字节复点，并且**跟他说一句**再动。读数今晚拿不到（手机不在）。
+    真包出来后 `gh release create <tag> release-assets/dsh-rootfs-<UTC>.tar.gz release-assets/SHA256SUMS release-assets/payload-meta.txt`（**资产名别以 `.` 开头**，gh 会改名）。
 
 
 ## 遗留问题

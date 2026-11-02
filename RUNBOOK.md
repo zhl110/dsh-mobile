@@ -1706,5 +1706,102 @@ Windows 侧枚举正常：`ADB Interface` `Status=OK`，`InstanceId=USB\VID_22D9
 所以"即装即用"这一格现在是**脚本齐、判据齐、只差取数那一发**；`tools/install-from-scratch.sh` **一行都没实机跑过**
 （这台是现役机，脚本第 3 步"rootfs 非空就停"本来就该拦住它 —— 真验证要第二台机或干净 rootfs）；
 `/root/.dsh` 那层的凭证普查**只跑了一半**（== 5 那节整节作废），所以 DROP 清单是按"运行态一律剥"定的、**不是按普查逐条定死的**；
+（→ 14.38：那套"词形普查当闸门"整条判据已被推翻 —— 它在本机同型 profile 树上必然误报（password 43 个文件、`sk-` 26 个），
+且会把脚本自己与已剥除的 `.bash_history` 算成命中，永远出不了包；现在闸门一是"已知凭证串回归"，且能在没有手机的情况下 `--selftest` 验。）
 他的东西一个没碰（`/data/local/tmp` 那批、cordis、锁屏、自启、purge）；没 reboot、没装包、没重启引擎；
 上游那 1 GB 多的 `/usr` 没做内容扫描（慢且 key 只会以字段名出现，这条在普查脚本里明写了"没扫"）。
+
+### 14.38 他一句"那你就先打包一个 release 出来，然后上传上去"：手机还是 `offline`，包没打成；但这段时间把**闸门一判死重估了一遍**，并在本机把它测到 3/3（2026-11-02，北京 23:5x 之后到 11-03 凌晨，手机不在场）
+
+**一、先说做不到的那半为什么做不到（读数，不是推）**
+
+```
+adb devices -l                → f22aa1e1  offline  transport_id:1
+adb reconnect offline         → 列表变空（条目直接消失）
+kill-server + start-server    → 又回 offline
+adb mdns services             → List of discovered mdns services（空，机上没开无线调试）
+4 次 × 12 秒轮询               → 四次都是空
+Get-Process | match 'adb'     → 只有 pid 53652，路径就是我一直在用的那发 ⇒ 没有两个版本抢 5037
+netstat -ano | 5037           → 监听者就是 53652
+Get-PnpDevice -PresentOnly VID_22D9 → ADB Interface OK / USB Composite Device OK / WPD 一加 13 OK
+```
+
+**Windows 承认这个 USB 设备、adb 承认它存在但求不出握手** ⇒ 是**手机侧那条调试会话**掉了，PC 侧没有能自己按下去的按钮（要重插 USB，或在弹窗里勾"一律允许"）。
+顺带把"PC 上是不是留着一份 rootfs 可以替着打包"也量了：`find /d/tools /d/mycode /c/Users/周海龙/Downloads -maxdepth 3 -size +50M` 只回两条 ——
+`/d/mycode/backups/stock_boot.img`（他那批刷机件，没碰）与 `/d/mycode/sokuji.tar.gz`（别的项目）⇒ **rootfs 只在那台机上**，这一格谁也替不了。
+
+**二、Release 的上传权限这格今晚量掉了（canary，验完即删）**
+
+之前一直挂着"这把 fine-grained PAT 能不能传 GB 级 Release 资产"。**用一发 80 B 的探针件试出来了**：
+
+```
+gh release create release-capability-canary --draft … downloads/.release-canary.txt
+  → https://github.com/zhl110/dsh-mobile/releases/tag/untagged-9c4bc1ab61a058f9e478（退出码 0）
+gh release view … --json tagName,isDraft,assets
+  → draft=true，assets=[{name:"default.release-canary.txt", size:80, digest:"sha256:1f000dddc17d…"}]
+gh release delete release-capability-canary --yes → releases 长度复点 = 0
+```
+
+⇒ **建 Release 与上传资产都有权**，真包打出来直接 `gh release create` 就行。
+**顺手撞到一条小坑**：资产名**不能以 `.` 开头** —— 我那份 `.release-canary.txt` 被 gh 改名成 `default.release-canary.txt`。以后命名别带前导点。
+
+**三、闸门一在原判据下**会永远出不了包**，这条是读代码 + 本机读数抓出来的**
+
+`tools/make-payload.sh` 第 1 节原本是"设备侧词形普查有命中就停"（扫 `apiKey|password|secret|sk-|Bearer ` 这些词）。
+在本机那份**同型**的 profile 树（电脑上官方桌面端 `~/.dsh/profiles/desktop`）上量它到底会命中什么：
+
+```
+apiKey 2 个文件   api_key 1   access_token 0   Bearer  13   sk- 26
+password 43       secret 28   refresh_token 0  client_secret 0
+```
+
+这些全是上游 js 里的**字段名、HTTP 头解析、OpenAI key 前缀校验代码**，一条都不是真凭证。
+那"改用值形状"行不行？也扫了一遍：`sk-[0-9a-f]{32}` 在 `~/.dsh` 整棵树下 **0 命中**；`ghp_…` 0；
+`AKIA[0-9A-Z]{16}` 2 个（`PIL/ImageFont.py` 与 `pnpm.mjs`）；`BEGIN … PRIVATE KEY` 1 个（`pnpm.mjs`）—— **猜形状这条路上误报和漏报一起来**。
+所以判据换成精确的那件事：**这台机上真在用的那些串，一个字节都不许出现在保留集里**。
+
+**四、改法（两处，都在 `scripts/dsh-payload-pack.sh`）**
+
+1. **闸门一 = 已知凭证串回归**：从 `entry.key` 整份、`/root/.dsh-env` 每个 `export` 的值、`/root/.dsh/llm-deepseek` 下所有文件的长 token
+   里取串（≥20 字符且含数字），**只进内存，绝不打印、绝不落盘**，再拿这批串去扫保留集；命中就是真泄露。词形那节降级成"只打印，不作判据"。
+2. **扫描面从"直接 find 活盘"改成"从第 3 节那份保留清单里筛"**。这一改顺带抓出一条**会永久卡住出包的死锁**：
+   旧版 `scan /root -maxdepth 1 -type f` 扫的是活盘，于是会把 ① **本脚本自己**（`/root/dsh-payload-pack.sh` 里就写着 `apiKey`/`password`/`secret` 这些词）
+   ② 已在 DROP 里的 `/root/.bash_history` 与 `/root/.dsh-env` 算成命中 —— 这三样**根本不会进包**，却能把 `N≠0` 永远坐实。
+   清单出自 `find_kept`，与 `tar --exclude` 同源 ⇒ 普查范围与包体范围恒等，不用两处各抄一份再对账（铁律 2）。
+   真凭证住哪儿也有读数：`/root/.dsh/llm-deepseek` = **79,090 B**（`downloads/payload-dry-90.txt` 第 1 节），而 `DSH_KEEP` 只留
+   `speech-to-text / profiles / dsh-purge` ⇒ 它本来就被剥掉，回归扫描是**再证一遍**，不是唯一防线。
+
+**五、闸门本身现在能在**没有手机**的情况下验（`--selftest`），本机实跑 3/3**
+
+```
+$ bash scripts/dsh-payload-pack.sh --selftest
+  A 埋一发进保留集 ⇒ 命中 1 : PASS
+     !! 保留集里出现凭证串 : /tmp/tmp.t2g4mdCuHn/data/leak.txt（distinct 1 个）
+  B 撤掉埋的 ⇒ 命中 0（当场取到 3 个串）: PASS
+  C 凭证源为空 ⇒ 报"取不到串"而不是 0 : PASS
+  合计 3 条：PASS 3 / FAIL 0        rc=0
+```
+
+三条断言各管一种形状：**埋雷要抓到**、**撤雷要 0 且当场取到过串**（不然那个 0 可能是"什么都没扫"的假 0）、
+**凭证源为空要明确报"取不到串（不是 0）"**而不是蒙成通过。`make-payload.sh` 现在出包前先在本机跑它一次（同一份脚本文件），
+不过就不出包。第 6 节的两个数还会写进 `payload-meta.txt`（"闸门 : 本机自测 3/3；已知凭证串回归 N 命中；名单闸门 0 命中"）。
+
+**六、名单闸门（闸门二）也单测了一发，同一个道理**
+
+拿合成树跑真 `tar` 的成员名单：必须命中的 15 条（`entry.key`、`session.v4.jsonl.zstd`、`.dsh-env`、`.bash_history`、`.ssh/id_*`、
+`./phone/`、`.npm/`、`apt/archives`、`redteam`、`attachments`、`llm-deepseek`、`frida`、`.dsh/logs|storages|cache`）**漏 0 条**；
+故意保留的 7 条（`profiles/web/cordis.patch.yml`、`dsh-purge/host-backups/*.bak`、模型目录、`dsh/package.json`、`/etc/passwd`、`.gitconfig`、
+`.dsh-market/state.json`）**误伤 0 条**。整包对账那次是 55 个成员 → 命中 26 个，比 15 多是**因为目录条目也进名单**（方向上更严，不是漏洞）。
+第 1 节那个"从普查文本里取计数"的 `sed` 也喂了三种输入：`0` ⇒ 读到 0、`7` ⇒ 读到 7、没有那行 ⇒ 空（走"没读到计数就不出包"那支，安全）。
+
+**七、提交与推送**
+
+（本发提交号见下面第八节之后由 `git log` 复点填死，别凭记忆抄。）
+
+**八、我这轮没做什么**
+
+**包没打成、Release 一个没建**（canary 那发已删，复点 `releases` 长度 0）—— `release-assets/` 仍是空的；
+`tools/install-from-scratch.sh` **仍是一行都没实机跑过**；`--census` 在**真机**上只跑到过第 2 节（第 5/6 节这套新判据是今晚在 PC 的同型树上验的，
+**手机端一次都没跑过**）；`/usr` 那 1 GB 多上游 js 没扫；
+**`/etc/shadow` 里 root 到底有没有哈希这个数今晚拿不到**（要在机上跑第 4 节才知道）—— 若"有哈希"，那**不能随包走**，这是出包前还要动的一格；
+他的东西一个没碰（`/data/local/tmp` 那批、cordis、锁屏、自启、purge），没 reboot、没装包、没重启引擎、没改 git 配置。

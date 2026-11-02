@@ -208,7 +208,7 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
 | **对账手机侧那个 dsh 自己写了什么**（状态 35 那一轮的五发，纯只读） | `scripts/dsh-agent-write-audit-probe71.sh` → `downloads/p71.txt`（cordis 现状/两份备份/`--dump-config`/手工调 runner/我的三层 md5。⚠ 它 ② ⑥ 两节路径写错 ⇒ 空读数，**空读数不能读成结论**）；`scripts/dsh-confine-recheck-probe72.sh` → `p72.txt`（**修正版**：模块真实路径、`confine()` 直调、围内/围外 `/proc/1/root` 对照、dpkg、hosts 对账、会话清单）；`73`/`74`/`75` → 同一份会话记录三次提取（73 抓错字段、74 抓到工具名但命令为空、**75 才把 44 条命令串全提出来**） |
 | 在机上读一份会话记录（`session.v4.jsonl.zstd`） | 见 `scripts/dsh-session-calls-probe75.sh` 第 ① 节那段的形状：`zlib.zstdDecompressSync` 解帧 → 按行 JSON → 取 `type==="tool/call"` → **`JSON.parse(data.arguments)` 才是命令**（`data.arguments` 本身是字符串）。FRAMES/LINES/DECOMP_FAILS 三个数要互相对得上 |
 | 重打 APK | `bash app/build.sh`（版本号在 `AndroidManifest.xml` 与 `build.sh` 两处） |
-| **打 rootfs 产物**（GB 级，不入库，挂 Release） | 先 `bash tools/make-payload.sh --dry` 看普查（只读），再 `bash tools/make-payload.sh`。剥除清单的**单一真源是 `scripts/dsh-payload-pack.sh`** 的 `DROP`/`DSH_KEEP`；PC 侧那两支只做压缩、两道闸门、指纹。产物与 `payload-meta.txt` 落 `release-assets/`（已 gitignore） |
+| **打 rootfs 产物**（GB 级，不入库，挂 Release） | 闸门自测**不需要手机**：`bash scripts/dsh-payload-pack.sh --selftest`（今晚 合计 3 条 PASS 3）。要出包时先 `bash tools/make-payload.sh --dry` 看普查（只读），再 `bash tools/make-payload.sh`（它会先跑自测）。剥除清单的**单一真源是 `scripts/dsh-payload-pack.sh`** 的 `DROP`/`DSH_KEEP`；PC 侧那两支只做压缩、两道闸门、指纹。产物与 `payload-meta.txt` 落 `release-assets/`（已 gitignore） |
 | **在别人机上装成即装即用** | `bash tools/install-from-scratch.sh`（取包→撞 sha→设备上以 root 解压→推四件→起入口→烤口令→装 APK）。现役那台机别跑，见脚本头部警告。给别人看的说明在 `docs/INSTALL-from-scratch.md` |
 | 重跑入口自测（**不需要手机**，Windows 侧就能跑） | `node scripts/dsh-entry.js --selftest`（2026-10-21 当场：`合计 58 条：PASS 58 / FAIL 0`；铁律 12） |
 | 换图标（切五档） | 先把满幅方图存成 `app/icon/icon-src.png`，再 `sh app/icon.sh`，最后重打 APK |
@@ -368,6 +368,13 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
 - **判"这套页面用不用某个网页 API"不能只扫前端 dist**（14.35，p79→p82 那次改口）：真页面是 **`dsh-web-frontend/dist` 64 个文件 + 57 个 `dsh-client-ui-*` 包**拼起来的（合计 184 个 js / 29.4 MB）。
   我只扫了 dist ⇒ 读出"`createObjectURL` 0 命中、`requestFullscreen` 0 命中"，并据此把下载与全屏判成"将来才用得上"——**错的**：pdf 预览在 `a.download = filename`、文档预览里有 `<video>`。
   ⇒ 这类"有没有真实用户"的判断，扫描面要先数清楚（`find … -path '*client-ui*' -name '*.js'`），或干脆看**壳的运行时日志有没有进过那一发**。
+- **安全闸门不能用"词形"当判据，且它的扫描面必须与产物同源**（11-02 夜，`scripts/dsh-payload-pack.sh` 那两处）：我第一版闸门是"文件内容里出现 `password|secret|sk-|Bearer ` 就停"，
+   在本机同型 profile 树上量到 `password` 43 个文件、`sk-` 26、`Bearer ` 13 —— **全是上游 js 的字段名与校验代码**，一条真凭证没有 ⇒ 这种闸门只会把交付永久卡死在假阳性上。
+   猜"值形状"也不成（`sk-[0-9a-f]{32}` 在整棵 `~/.dsh` **0 命中**，`AKIA[0-9A-Z]{16}` 反倒在 PIL 与 pnpm 里误报）。**能当闸门的是"这台机上真在用的那批串"**：
+   从会被剥掉的凭证源取真值（只进内存、绝不打印），回扫产物。另一条同族：**别拿 `find 活盘` 当扫描面** —— 那会把 ① 探针脚本自己（里面写着那些词）② 已经在剥除清单里的文件算成命中，
+   而这两样根本不会进包；清单要出自与 `tar --exclude` 同一批条件的那份列表。
+   附带一条：闸门这类"只跑一次看不出对不对"的逻辑，做成一个**不需要外设就能跑的 `--selftest`**（埋雷要抓到 / 撤雷要 0 且当场取到过串 / 源为空要明说"取不到"），
+   否则手机上掉线这段时间里你连"闸门是不是坏的"都无法判断。
 - **`grep -F` 和 `.{0,60}` 不能同时用**（p83 那发）：加了 `-F`，`.` 与 `{0,60}` 全成字面量 ⇒ 五个文件的"原文窗口"齐刷刷空，看着像"页面里没有这段代码"。空窗口先怀疑自己的正则，别下结论。
 - **往 chroot 里塞"一条命令"有两种静默失败，11-02 这一轮各撞一次**（都是白花一轮 adb 的那种）：
   ① **PATH**：`chroot $ROOT /bin/sh -c "tar …"` 继承的是 **Android 那套 PATH**，里面没有 `/usr/bin` ⇒ 报 `tar: not found`、`head: not found`，
