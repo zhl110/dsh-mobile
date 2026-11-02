@@ -185,6 +185,7 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
 19. **这台机"直跑、不弹窗、root 权限"就是他要的效果 —— 别把没围栏当事故报给他**（10-21 深夜他两句：「不撤，插件你先不用管」＋「那是我让他装的，没关系，我要的就是这种效果」）：
     purge 把沙箱包装 / 文件围栏 / 审批弹窗三层一起短路，**这是他要的交付形态**，不是待修的缺陷。⇒ 汇报时**只陈述读数**（"命令真执行、没被拒、没弹窗"），不要再来一轮"风险提示 + 要不要补围栏"；
     也不许顺手去接围栏、撤 purge、改档位（改这些是他点头才动）。**归因要小心**：手机侧那次 `apt-get install ripgrep jq` 是**他授意**的，我第一版写成"它自己就装了、不会问他"⇒ 那是替他担心错了对象。
+    **他实测"能用/能装"就是结案证据，别拿自己复点到的一发失败去翻案**（10-23 00:2x 形状：我在日志里撞到一发 `装插件 → 500`、把它列进"没闭环的账"，他一句"能装，我已经测试过了，装了几个插件了，能用，没问题"）⇒ 判据次序是**真实使用 > 日志里一发红**；留痕照写进 RUNBOOK，但**不再追、不再当缺陷报**（与他划走的子问题同族，与上一条"别把没围栏当事故报"同一族）。
     唯一还可以提的是**具体后果**（不是意见）：它现在能碰整个 `/phone`（顶层 117 项）与经 `/proc/1/root` 摸宿主，包括他 `/data/local/tmp` 那批刷机件；要收窄就把工作区挪进单独子目录（#41），**这条他自己决定，我不催**。
 
 ## 常用命令（Windows 侧，git-bash）
@@ -342,6 +343,34 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
   我在组目录里 `ls */*.zstd` 数 ⇒ 三个组全回"会话数 0"，而同一发的逐文件列表读到了 21 份。**"逐分组计数"与"逐个文件列表"两个口径并存时以列表为准**。
 - **purge 的 shim 在每次引擎启动都跑一遍**（14.33，探针 74 第 ② 节）：`/tmp/dsh-purge-desktop.log` 尾部是 `[boot] enabled=true surface=web …`→`[home] home=/root/.dsh`→`[guard.wrap] …`，
   当天 14:00 之后 201 行。判"purge 今天有没有被再应用一次"**别看这份日志的行数**，看**被改模块的 mtime**（仍 10:35:16）与 `.dshpurge.bak` 计数（仍 56）——两个都没动 ⇒ 没重应用。
+- **WebView 壳"点了没反应"的第一嫌疑人是没接的 `WebChromeClient` 回调**（14.34）：`onShowFileChooser` 不实现 ⇒ 默认实现**直接 `return false`**，Chromium **静默丢掉**这一次文件选择 —— console 干净、网络 0 请求、屏幕上什么都没有，
+  看着像前端坏了，实际是壳没接线。同一族：`onPermissionRequest` 默认全拒（0.6 之前的语音）、`onShowCustomView` 默认不放（HTML5 全屏，至今没接）。接了之后**三条出口都要结掉回调**（选中 / 取消 / `createIntent()` 抛错），
+  漏一条那个 input 就永远停在"正在选"，下次连 `click` 都不发 ⇒ **自家把同一个症状原样再造一遍**。
+  → **10-22 夜这族一次接完了（壳 0.10，14.35）**：`onShowCustomView`/`onHideCustomView` 实现了（真用户＝文档预览里那个 `<video>`，p86 量到），
+  **`setDownloadListener` 也补上了**（0.9 及之前根本没设过 ⇒ 默认行为是"什么都不做"，真用户＝pdf 预览那颗"下载"按钮，p85 量到 `a.download = filename`）。
+  这两格从"没实现"变成"接了并有实测读数"；`onGeolocationPermissionsShowPrompt` 仍没接 —— 但 p82 量到**全摊 184 个文件里 `navigator.geolocation` 0 命中**，那格按"没人用"挂着。
+- **附件通道不看 `setAllowFileAccess(false)` / `setAllowContentAccess(false)` 的脸色**（14.34 实测）：`content://com.android.providers.downloads.documents/…` 92 B 在两个开关都关着时照样被 WebView 读回页面。
+  ⇒ 别为了"修上传"去翻这两个开关（翻了只是把"页面能自己加载 content URL"这扇门打开）。要保 accept 列表（页面插件那条是 `.zip,.tgz,.tar.gz,.tar,.skill`）就**必须用 `params.createIntent()`**，手搓 GET_CONTENT 会把它丢了。
+- **设备上的 shell 也会做 glob 展开**：`am start -a GET_CONTENT -t */*` 里那个 `*/*` 不加引号会被设备上（不是 git-bash）展开成文件名，`query-activities` 于是读出**假 0**；我因此差点判"这台机没有可用的选择器"。加引号重跑 = **20** 项。
+  同一条链上还有第二个坑：**`grep -c` 没命中时退出码是 1**，用 `&&` 串起来会把后半条整条带走，也读成 0 ⇒ 这类对账用 `;` 串，别用 `&&`。
+- **CDP `DOM.setFileInputFiles` 两条读数坑**（14.34，工具已做成 `scripts/dsh-cdp.js --setfile`）：① 它是**异步 IPC**，调用 resolve 时 FileList 还没落到 DOM；② 这页的 React 在 `change` 之后**把 `input.value` 清空** ⇒ 之后再 `querySelector` 读 `files.length` 必是 **0**，那是假证。
+  正确写法：**在 `change` 回调里当场把 `[...el.files]` 抓进 `window`**，再读那份引用。同理，`--tapsel` 量到**负数 y**（那次 `y=−6725`）＝元素在滚动区外，触摸发出去了但落不到，**不能记成页面缺陷**。
+- **DocumentsUI（这台 OOS 15）网格里"点缩略图"＝预览，不是选中**（14.34）：点 `preview_icon` 会弹"打开方式"resolver（MT管理器/WPS/文本编辑器那一屏），URI 永远回不到壳；
+  要点**同一张卡片非缩略图那块**（`item_root` 去掉 `preview_icon` 的区域）才把 content:// 交回调用方。`uiautomator dump` 里两个节点的 bounds 挨着，光看 `text=` 会点错。
+- **网页发起的下载要"真手势"才算数**（14.35）：`evaluateJavascript(userGesture:true)` 里造一个 `<a download>` 再 `a.click()` ⇒ `onDownloadStart` **一次都不进**（我第一轮就是这么自测的，读成"没反应"）；
+  换成 CDP `Input.dispatchTouchEvent`（`scripts/dsh-cdp.js --tapsel`）就进。⇒ 测下载**只能用 --tapsel**，别用 --eval / `--click`。
+- **WebView 的 `onDownloadStart` 把页面起的文件名丢了**（14.35 实测）：`contentDisposition` 交过来是 **空串**（桌面 Chrome 会带），`<a download="会话-22.md">` 那个名字**传不到壳** ⇒ 只能从 URL 尾巴猜（blob 就猜成一个 UUID）。
+  补法：页面侧挂一个捕获阶段 click 监听，把 `a.download`（反射属性，赋值也看得见）用现成的 `prompt('dsh:dlname', 名字)` 通道记回来，6 秒内有效、只当文件名、过 `sanitizeName` 才落盘。
+- **`blob:` 的 URL 里没有字节**（14.35）：字节只活在渲染进程内存上，DownloadManager（另一个进程）取它必失败 ⇒ blob 这条路只有页面自己 `fetch` 自己那个 blob → FileReader 转 base64 → 分段捞回 Java 侧落盘（壳里上限 8 MiB）。
+  http(s) 那条相反：**必须把 WebView 的 cookie 抄成请求头**（`addRequestHeader("Cookie", …)`，注意 API 名不是 `addHeader`），否则下载进程请求本机 `:3081` 直接吃 401/404。
+- **判"这套页面用不用某个网页 API"不能只扫前端 dist**（14.35，p79→p82 那次改口）：真页面是 **`dsh-web-frontend/dist` 64 个文件 + 57 个 `dsh-client-ui-*` 包**拼起来的（合计 184 个 js / 29.4 MB）。
+  我只扫了 dist ⇒ 读出"`createObjectURL` 0 命中、`requestFullscreen` 0 命中"，并据此把下载与全屏判成"将来才用得上"——**错的**：pdf 预览在 `a.download = filename`、文档预览里有 `<video>`。
+  ⇒ 这类"有没有真实用户"的判断，扫描面要先数清楚（`find … -path '*client-ui*' -name '*.js'`），或干脆看**壳的运行时日志有没有进过那一发**。
+- **`grep -F` 和 `.{0,60}` 不能同时用**（p83 那发）：加了 `-F`，`.` 与 `{0,60}` 全成字面量 ⇒ 五个文件的"原文窗口"齐刷刷空，看着像"页面里没有这段代码"。空窗口先怀疑自己的正则，别下结论。
+- **探针输出文件名要先查同名再写**（14.35 的事故）：我把新探针的读数写进 `downloads/p75.txt`，**覆盖了 14.33 引用过的那份**（差 1 字节，已按原脚本重跑生成，见 14.35 六）。
+  `tools/run-probe.sh` 不挡覆盖 ⇒ 落盘前 `ls downloads/p<NN>*.txt`。
+- **`navigator.clipboard.writeText` 在这台机的 WebView 里是通的，`readText` 不通**（14.35 各实测一次）：写 → 原生 `input keyevent 279`（KEYCODE_PASTE）粘得回来，同一个串；读 → **`NotAllowedError`**。
+  网页里那两处"从剪贴板粘贴"（p82：excel 与 terminal 两个包在用 `clipboard.readText`）因此点了没结果 —— 这条**没有壳侧回调可接**（WebView 不暴露 clipboard-read），能做的是拿 `prompt` 通道 + 原生 `ClipboardManager` 给它垫一个桥（未做，等他点头）。
 
 ## 不在这里写的东西
 

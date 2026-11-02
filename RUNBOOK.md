@@ -1406,3 +1406,215 @@ recommends 各批多拖进来的差集：**77 / 0 / 40 / 49 个**（52.3 / 0 / 2
 **推完 198c49a 那一刻**当场复点三个数：`rev-list --count origin/main..HEAD` = **0**、`git ls-remote origin refs/heads/main` = `198c49a67779ee…` **与当时 `rev-parse HEAD` 同一个号**、
 `198c49a` **那一发**三份文件 blob 号在「工作仓树 = 父仓树 = 盘上 `git hash-object`」三处全等（`64304319` / `f0190657` / `e1e9f587`；本行这发回填会让 RUNBOOK 自己变号，按上一条那句规矩——只认当场量，不拿文档当恒等值）。
 **父仓 `D:\mycode` 没有 remote**（`git remote -v` 当场 0 行）⇒ 这轮"推送"只发生在工作仓，父仓 `18039cd8` 仍是本地件（AGENTS.md 已知坑那条"提交≠上传"在这儿第二次撞上，读数一样）。
+
+### 14.34 他报"点加号选文件/图片没反应"：断点在壳没接 `onShowFileChooser`；0.9 已经把这条链跑到"页面真读出那 92 个字节"（2026-10-22 晚 21:0x–21:57，手机在场；取证面 = logcat + CDP + 入口自述页）
+
+**他的原话（问题口径）**：手机上的工作台，点那个加号（可以设定目标、计划、反馈、加文件那一栏）——"我今天想上传一个图片，就是说想让他帮我看一个图片，或者说添加一个文件的时候，哎，没有反应，就点那个东西没有反应"，并要我"检查一下其他的对应的这些功能有没有一一对应上，肯定可能也有其他的一些隐患在里面"。
+
+**一、断点定位（两侧各取一次数，不靠猜）**
+
+页面侧（CDP 把 hook 挂到 `HTMLInputElement.prototype.click`）：点加号那一下**真发了**一次 `input[type=file].click()` ⇒ 前端没错。壳侧（`logcat -c` 清空之后再点）：**0 条** `START u0` / GET_CONTENT / documentsui ⇒ 系统选择器根本没被拉起来。
+
+病根：**`WebChromeClient.onShowFileChooser` 我们没实现**，Android 的默认实现**直接 `return false`** ⇒ Chromium 把这一发**静默丢掉**：console 干净、网络 0 请求、屏幕没反应。与 0.6 之前"点语音没声"是**同一族**（那发是 `onPermissionRequest` 默认全拒）。
+
+系统侧排除：`cmd package query-activities` 数 GET_CONTENT 的可解析项 —— `-t "image/*"` **12** 项、`-t "*/*"` **20** 项（含 `com.android.providers.media.photopicker.PhotoPickerGetContentActivity`、`com.android.documentsui.picker.PickActivity`）⇒ 手机不缺选择器，缺的是我们这头的接线。**这两个数是给 `*/*` 加上引号重跑才拿到的**：不加引号会被**设备上的 shell** 当 glob 展掉，我第一轮读出过假 0（进 AGENTS.md 已知坑）。
+
+**二、0.8 → 0.9 改了什么（只动壳，前端一行没动）**
+
+| 件 | 改动 | 为什么这么写 |
+| --- | --- | --- |
+| `MainActivity.java` | 新增 `onShowFileChooser`（`params.createIntent()` → `startActivityForResult(REQ_FILES)`）＋ 新增 `onActivityResult` ＋ 单发待决的 `fileCb` | **必须走 `params.createIntent()`**：手搓一条 GET_CONTENT 会把页面的 `accept` 丢掉 —— 插件那一发是 `.zip,.tgz,.tar.gz,.tar,.skill`，实测 accept 原样进了 Intent（21:55:58 那行读数） |
+| 同上 | 三条路（选中 / 取消 / `createIntent()` 抛错）**全部**要 `onReceiveValue` | 漏一条，那个 input 永远停在"正在选"，下一次点加号连 click 都不发 ⇒ **自家把同一个症状再造一遍** |
+| 同上（0.9 加的） | `onActivityResult` 里壳自己 `openFileDescriptor(uri,"r")` 复点一次，只报 mime 与字节数 | 他点一次只够问一个问题；这一行让同一次点击同时答出"通行证有没有效"和"WebView 传不传得出去"。**内容不进壳**（数据路径没加间接层） |
+| `AndroidManifest.xml` / `app/build.sh` | versionCode 7→8→9，versionName 0.7→0.8→0.9 | 打包不是逐字节可复现 ⇒ sha 认"哪一次打包"，版本号只能区分发次 |
+
+装机读数（`bash tools/install-apk.sh`，**只装不重打**）：本地 `app/out/dsh-app.apk` **152,166 B** sha256 `2b2dc8dd7668674fe0061f9a2eaeeacf141e0d914cfbc868de692200f30c957d` → 推上去逐字节撞上 → `pm install -r` 后机上 `base.apk` **152,166 B / 同一个 sha**、`versionName=0.9`、`lastUpdateTime=2026-10-22 21:48:31`、两处副本 `ls` 均 No such file。0.8 那发（**152,167 B** / `6d25f79e54be1ecb…`，21:26:51）此前已装并验过"选择器开得了"。**0.7 原件留在 `downloads/apk-0.7-installed-base.apk`（152,166 B / `be025bb3…`）＝ 退回路径**。
+
+**三、这条链现在跑到哪一格（每一格一条读数，不是一句"应该能"）**
+
+1. 壳拉起选择器 ✅ `21:49:27 files :: 要开选择器：android.intent.action.GET_CONTENT｜多选=true｜accept=`
+2. 选择器真在屏 ✅ `mCurrentFocus=…com.android.documentsui/com.android.documentsui.picker.PickActivity` ＋ 截图 `downloads/pick/picker-open.png`（224,010 B）
+3. 选中后 URI 交回壳 ✅ `21:54:46.057 files :: 选中 1 个（上限 20）｜首个=content://com.android.providers.downloads.documents，路径 62 字符`
+4. 壳拿这张临时通行证打得开它 ✅ `21:54:46.086 files :: 壳侧复点 #0 ⇒ 打得开｜text/plain｜92 B`（与 `ls` 的 92 B 撞上）
+5. **WebView 把 content:// 的字节读给了页面** ✅ CDP 在 `change` 回调里抓 File：`{"ev":["0 change ⇒ files=1"],"name":"dsh-upload-test.txt","size":92,"type":"text/plain","head":"dsh-mobile 附件链端到端测试件\nm"}` ⇒ 结论写死：**`setAllowFileAccess(false)` / `setAllowContentAccess(false)` 拦的是"页面自己加载 URL"，不影响附件通道**，别为了修附件去翻这两个开关
+6. 页面把它挂进待发附件栏 ✅ `[data-slot="conversation.input.attachments"]` 读数 `dsh-upload-test.txt / TXT 92B`
+7. 取消也算干净 ✅ `21:32:46` 与 `21:56:27` 各一次 `结果码=0（用户取消或没选中）⇒ 交 null 给页面`，之后同一个 input 还能再开第二次
+8. **仍未验**：按"发送"之后 multipart 是否真把 92 B 送过入口 `:3081` → 引擎 `:3080`。这一格**要他点一下**——我不替他在他的会话里发测试消息。现场留好了：他工作台输入框里现在挂着 `dsh-upload-test.txt`（92 B）那一发待发附件，按发送即成，不想要点 × 撤掉。测试件在机上 `/sdcard/Download/dsh-upload-test.txt`（92 B / sha `6ef95fb6…`）与 `dsh-upload-test.png`（3,961,128 B / `7b0ab834…`；图片走的是同一条路）
+
+补一条这台机特有的坑（第 3 格差点没走到）：DocumentsUI 的网格卡片上**点缩略图＝`预览"xxx"文件`**，会弹"打开方式"resolver（MT管理器/WPS/文本编辑器那一屏），不是选中；**点卡片非缩略图那一块**（`item_root` 去掉 `preview_icon` 的区域）才把 URI 交回壳。
+
+**四、"其他功能有没有一一对应"这一半的答（对照表，只列有实证的格）**
+
+| 页面能力 | 壳侧接线 | 状态与读数 |
+| --- | --- | --- |
+| `<input type=file>` 三条（附件 2 条 `accept` 空、多选；插件/skill 1 条 `.zip,.tgz,…`、单选） | 0.8 起的 `onShowFileChooser` | ✅ 开得了、读得出（第三节 1–6）；插件那条**只验到 accept 原样进 Intent，没真选**——一选就往他引擎里装插件，那一步等他点头 |
+| 语音输入 `getUserMedia(audio)` | 0.6 `onPermissionRequest` + `audioOnly` 放行 | ✅ 前几轮端到端真跑过 |
+| 相机/拍照 | 同一条 `requestMic` 被 `audioOnly` 拒；manifest 无 `CAMERA` | 按设计不通（这页也没有 `<input capture>`） |
+| 页面发起下载（`download` 属性 / `blob:`） | **没接 `setDownloadListener`** | 未见真实使用 ⇒ 没实现；将来"点了下不下来"就是这一格 |
+| HTML5 全屏（视频/图片灯箱） | **没接 `onShowCustomView`** | 未接 ⇒ 与附件这次同族的静默无反应，页面用到就会复现 |
+| 复制按钮 `navigator.clipboard.writeText`（页面 3 处） | 壳没做，靠 WebView 自己 | **未验**。那次 `--tapsel` 量到按钮中心 `y=−6725`（滚出屏外）⇒ 触摸发出去但落不到，那不算页面缺陷，算我的判据失效 |
+| 输入法顶起输入框 / 返回键收侧栏 / 沉浸全屏 | 0.4–0.7 已接 | ✅ 前几轮 |
+
+**五、这轮新开的取证面**：`scripts/dsh-cdp.js` 加了 `--setfile "选择器=机上绝对路径"`（CDP `DOM.setFileInputFiles`）——绕开选择器直接喂一个**文件路径**给页面，单独问"页面读不读得出字节"这一格。用它时两条坑（已进 AGENTS.md）：这条 IPC 是异步的；而 React 在 `change` 之后会把 `input.value` **清空** ⇒ 必须在 `change` 回调里当场把 File 抓进 `window`，否则之后读到 `files:0` 是假证。我第一轮就被它骗过，连塞了 4 发附件进他 composer，事后逐张 × 撤干净（读数 `clicked:4, still:0, rail:""`）。
+
+**六、我这轮没做什么**：前端一行没动；那两个开关没翻；manifest 权限没加（`CAMERA` 没加＝拍照仍不通，按现状）；`setDownloadListener` / `onShowCustomView` 没实现（无实证需求）；插件上传没真选；**没在他的会话里发过任何消息**；`/data/local/tmp` 他那批、cordis、锁屏、自启开关一个没碰。设备侧我自己建的只有两件：`/sdcard/Download/dsh-upload-test.{txt,png}`（发送那一发还要用，**先留着**）与 `Android/data/com.zhl.dsh/files/dsh-cdp-upload.txt`（**已删**，删后该目录只剩 `shell.log`）。PC 侧新增 `downloads/pick/ui-09.xml`–`ui-15.xml`、`downloads/setfile-probe*.txt`、`downloads/apk-0.7-installed-base.apk`（`downloads/` 不入库）。
+
+**→ 同夜 23:2x 就地改口（旧话不删，写在 14.35）**：这一节里 **"`setDownloadListener` / `onShowCustomView` 没实现（无实证需求）"那半句作废** —— 两条都在壳 **0.10** 接完并验了（14.35 二、三）。
+"无实证需求"这个判据本身也是错的：我那句"页面没在用"来自**只扫前端 dist**的一次扫描，而真页面还有 **57 个 `dsh-client-ui-*` 包**，pdf 预览在用 `a.download = filename`、文档预览里有 `<video>` ⇒ **有真实用户**（14.35 四）。
+
+**七、这一代的现场读数（写文档时当场取的，别和下轮混）**：入口 pid **10326**、引擎 pid **4409**（`etime 07:22:52`）；`curl http://127.0.0.1:3080/` 裸 = **401/68 B**、`:3081/` 无 cookie = **404/10 B**（这两条就是"设计如此"的健康口径）。
+
+**八、git**：本轮代码（`MainActivity.java` / `AndroidManifest.xml` / `app/build.sh` / `scripts/dsh-cdp.js`）＋这三份文档 **全部未提交**（他说提交我才提交），提交号回来填死。
+
+### 14.35 他追问"这两个现在是没实现，而不是坏了。那为什么不给它实现？是有什么隐患吗？"＋"把没做的东西列个清单写清楚它到底是怎么回事"：壳 0.10 一次接完全屏 / 下载 / 文件名，顺手把我上一轮判错的范围改口（真页面是 57 个 client-ui 包拼的）（2026-10-22 晚 22:0x–23:2x，手机在场）
+
+**他的原话（问题口径，两句都要答）**：
+① "那个什么 navigator clipboard。那删除、复制按钮未见。还有那个 HTML5 全屏没有接 onShowCustomValue，这两个现在是没实现，而不是坏了。**那为什么不给它实现？我跟你说的就是把所有的功能全部都接上，是有什么隐患吗？还是怎么样？**"
+② "**两个开关没翻，是指什么东西啊？你下一次给我输出这个结果的时候，不要给我这么输出结果啊！**你把……就是你没做那些东西，你要告诉我的东西，**你给我列个清单，写清楚它到底是怎么回事**啊。"
+⇒ 这一节按这两问排：**一**答"为什么没做／有没有隐患"，**五**是那张清单（大白话版也贴在给他的回复里），**六**交代我自己两件做坏的事。
+
+**一、先答那两问（不绕）**
+
+1. **为什么之前没接全屏与下载？—— 不是隐患，是我设了一道"有实证需求才接"的门槛，而那道门槛的判据我用错了范围。**
+上一轮我扫了前端产物（`dsh-web-frontend/dist`，64 个文件）读出 `requestFullscreen` 0 命中、`createObjectURL` 0 命中，就判"这套页面暂时不用 ⇒ 接了是空转"。**这个"不用"是错的**：真页面除了 dist，还有 **57 个 `dsh-client-ui-*` 包**在往里注入 UI（14.35 四把这条链完整记下来）。pdf 预览那颗"下载"就是 `a.download = filename` + `a.click()`，文档预览里就有 `<video>` ⇒ **两条都有真实用户**，0.9 及之前的真实表现就是"点了没反应"，与他报的加号那发**同一个病族**。
+2. **剪贴板那条不是"没实现"，是我少写了一句人话 + 少做了一次实测。**
+Android 的 WebView **没有"复制"这个壳侧回调**（复制是 Chromium 自己完成的，没有 `onCopy` 可接）⇒ "接上"这个动作在这条上不存在。我上一轮只标了"未验"就交了，没去验，这是我的漏。本轮实测：**写通**（`writeText` → 原生粘贴键粘得回来，同一个串），**读不通**（`readText` 回 `NotAllowedError`，且这条 WebView 不给壳任何回调 ⇒ 要通只能自己垫桥，见清单第 4 条）。
+3. **有没有隐患？—— 接这三条各自的代价，说清楚了他判断：**
+   - 全屏：多一层压在 WebView 上的 View，返回键要排优先级（全屏 → 右边栏 → 左边栏 → 退出提示）。已经按这个序做了（`handleBack` ⓪ 分支），读数在三①。
+   - 下载：要把 WebView 那份入场 cookie **抄给系统下载器进程**（不抄就 401，抄了就是多一个进程拿到那张票）。只抄当次请求、只进请求头、日志只报长度（53 字符）。落点是公共 `内部存储/Download/`，**这个 App 到现在仍然没申请任何存储权限**（走 MediaStore / DownloadManager）。
+   - 文件名通道：往页面注入一个 click 监听，走的是那条**没有来源校验的 `prompt()` 通道**（清单第 6 条挂着的那件事）。三条限制：只在还在本机入口这一源时注入、名字只存 6 秒、只当文件名用（过 `sanitizeName` 才落盘）。
+   - 一句话：**没有一条是"因为危险所以不做"**。他这句"把所有功能都接上"我按"接"执行。
+
+**二、壳 0.10 改了什么（只动壳，前端一行没动）**
+
+| 件 | 改动 | 为什么这么写 |
+| --- | --- | --- |
+| `MainActivity.java` | `onShowCustomView` / `onHideCustomView` + 三个字段（`fullscreenView` / `fullscreenCb` / `fullscreenBox`）＋ `exitFullscreen(why)` / `hideFullscreenCb(cb)` | Chromium 把那个 View 交给我们，**不接就是静默退回**；`cb.onCustomViewHidden()` 必须结，否则页面以为自己还在全屏里、按钮状态错位。**先把状态置 null 再结回执** —— 结回执会让 Chromium 反过来再进一次 `onHideCustomView` |
+| 同上 | `handleBack()` 新增 ⓪ 分支：在全屏层里按返回 ⇒ 只退全屏，不问页面、不飘退出提示 | 否则那一发会先被"问页面"吃掉，人要多按一次 |
+| 同上 | `web.setDownloadListener(…)` → `onPageDownload` 按前缀分三条路：http(s) / data: / blob: | 三条的"取得到取不到"根本不是一回事：http 交系统下载器（另一个进程）、data 的字节就在 URL 里、**blob 的 URL 里没有字节**（DownloadManager 取它必失败） |
+| 同上 | `downloadViaManager`：`addRequestHeader("Cookie", …)` + UA + `setDestinationInExternalPublicDir(DIRECTORY_DOWNLOADS, name)` + 完成后通知 | 不抄 cookie 请求本机 `:3081` 直接 401/404。**API 名是 `addRequestHeader` 不是 `addHeader`**（我第一发就撞在 javac 上） |
+| 同上 | `readBlobAndWrite` + `BLOB_FETCH_JS`：页面自己 `fetch(它那个 blob:)` → FileReader 转 base64 → 每 300 ms 分段捞回（段 192 KB、上限 8 MiB）→ `saveBytes` 走 MediaStore 落盘 | 这是 blob 唯一的出口，不是我"多垫一层"。**上限 8 MiB 是硬口子**（清单第 3 条） |
+| 同上 | `DL_NAME_JS` + `injectDownloadNameHook()` + `fromPanel` 新增 `dlname` 分支 + `pendingDlName/pendingDlAt/fileNameSource` 三字段 | WebView 的 `onDownloadStart` **把 `<a download>` 的名字丢了**（`contentDisposition` 交过来是空串，桌面 Chrome 不会）⇒ 只能趁点击还在页面里的时候把它记回来 |
+| `AndroidManifest.xml` / `app/build.sh` | versionCode 9→10、versionName 0.9→0.10；**权限一个没加**（仍无存储权限、无 `CAMERA`） | 打包不逐字节可复现 ⇒ sha 认"哪一次打包" |
+
+装机复点（`bash tools/install-apk.sh`，只装不重打）：本地 `app/out/dsh-app.apk` **160,359 B** sha256 `d4476e4ed078f71ca67d1096ab75197e2a803d6faad520ebccdb47036a1c9f7a` → 推上去逐字节撞上 → 机上 `base.apk` **同一个 sha / 160,359 B**、`versionName=0.10`、`lastUpdateTime=2026-10-22 22:51:43`、两处副本 `ls` 均 No such file。dex 61,084 B、aapt2 link 124,401 B。
+**同一夜 0.10 打过三发**（同尺寸、不同 sha ⇒ 只能靠 sha 认）：装机过两发 —— 22:45:36 那发（全屏＋下载三路由，sha `40065847…`）与现在这台上的 22:51:43 那发（加了改名通道，sha `d4476e4e…`）；中间还打出过 sha `ab845453…` 一发（javac 修 `addRequestHeader` 之后），**它装没装过从读数分不出来，只列着不当结论**。
+
+**三、每条一个实测读数（不写"应该能"）**
+
+**① HTML5 全屏（`onShowCustomView`）**
+```
+22:31:21.864 fs :: 已进入页面元素全屏：FrameLayout｜全屏层已铺满 root｜WebView 已置 GONE
+22:32:22.396 fs :: 页面自己要求退出 ⇒ 手里本来没有全屏层，只把回执结掉
+22:32:22.397 fs :: 在页面元素全屏里按了返回 ⇒ 全屏层已撤，WebView 重新可见
+```
+两条退出路径都验到：页面侧 `document.exitFullscreen()` 会走到 `onHideCustomView`，返回键走 `handleBack` ⓪ 分支。native 与页面两侧都读得到状态（页面 `fullscreenElement` 同步）。
+
+**② 下载：http 那条（系统下载器 + cookie）**
+```
+22:46:21.690 download :: 页面要下载｜源前缀=http:｜文件名=vendor-DV2921Zo.css｜类型=text/css｜页面报的大小=0 B｜Disposition=(空串)｜URL 尾=http://127.0.0.1:3081/assets/vendor-DV2921Zo.css
+22:46:21.691 download :: 已把 WebView 那份 cookie 抄给下载器（53 字符，值不进日志）
+22:46:21.706 download :: 已交给系统下载器（任务号=78）⇒ 落 内部存储/Download/vendor-DV2921Zo.css
+```
+落盘件 **27,312 B / md5 `1c35dff012e628830393e650464f612b`**（与源文件逐字节相同）。
+
+**③ 下载：blob 那条（页面自取 → 壳落盘）**
+```
+22:36:36.721 download :: 页面要下载｜源前缀=blob:｜文件名=30ba59e4-2efb-4878-8396-8870526fca41｜类型=text/plain｜页面报的大小=878 KB
+22:36:36.730 download :: 页面回话=started｜开始每 300ms 问一次
+22:36:37.119 download :: base64 已捞完：共 1200000 字符（分 7 段）
+22:36:37.138 download :: blob: 已自己写盘：878 KB → 内部存储/Download/30ba59e4-…-8870526fca41
+```
+900,000 B 的 blob 从点击到落盘 **0.42 秒**。**这一发文件名是个 UUID** —— 就是 ④ 那条要治的病。
+
+**④ 文件名通道（0.10 补的那一发）**
+```
+22:51:55.870 dlname :: 页面里那只记名字的监听挂载结果="ok"（ok=新挂上／already=已挂过／throw-* 或 null=没挂上）
+22:54:01.713 dlname :: 收到页面起的名字（14 字符）⇒ 存 6 秒
+22:54:01.720 download :: …｜文件名=页面起名-测试-01.css｜名字来自=页面 download 属性（prompt 通道记回来的）｜…｜Disposition=(空串)｜URL 尾=…/assets/vendor-DV2921Zo.css
+22:54:01.746 download :: 已交给系统下载器（任务号=79）⇒ 落 内部存储/Download/页面起名-测试-01.css
+22:55:13.318 download :: …源前缀=blob:｜文件名=blob-改名复点.txt｜名字来自=页面 download 属性…
+22:55:13.667 download :: blob: 已自己写盘：89 B → 内部存储/Download/blob-改名复点.txt
+```
+两条都撞上判据：http 那发落盘件 md5 与源文件**逐字节相同**（`1c35dff0…`）；blob 那发 `cat` 回读内容一字不差。`名字来自=` 这个字段就是"断点在哪一格"的读数（Content-Disposition / 页面 download 属性 / URL 尾巴猜的 / 时间戳兜底，四档在 `fileNameFrom` 里各写一档）。
+
+**⑤ 剪贴板（本轮各实测一次，23:0x）**
+- **写：通**。页面 `navigator.clipboard.writeText('剪贴板复点-2257')` → 壳不参与 → 我用原生 `input keyevent 279`（KEYCODE_PASTE）往我自己临时建的一个 textarea 里粘 → 回读 `剪贴板复点-2257`，**判定=撞上**，粘完把那个框删掉（`残留框:0`）。⇒ 页面里那些"复制"按钮（p82 数到 4 个包在用）**不需要壳做任何事**，之前"未见按钮生效"是因为我一次都没真验过。
+- **读：不通**。同一个页面里 `await navigator.clipboard.readText()` → **`NotAllowedError`**。WebView 不给这个回调任何壳侧钩子 ⇒ 想做只能垫桥（清单第 4 条）。**用的人**：`dsh-client-ui-sidebar-documentpreview/lib/client.excel.js` 与 `dsh-client-ui-sidebar-terminal/lib/client.terminal.js`。
+
+**⑥ 一条这台机特有的坑（决定上面这些读数怎么取才算数）**：**下载要真手势**。
+我在 `evaluateJavascript(…, userGesture:true)` 里造 `<a download>` 再 `a.click()` ⇒ `onDownloadStart` **一次都不进**（第一轮我据此以为监听没生效）；换成 CDP `Input.dispatchTouchEvent`（`scripts/dsh-cdp.js --tapsel`）就进。⇒ 测下载只能用 `--tapsel`，别用 `--eval` / `--click`。
+
+**四、范围改口这一路（p79 → p86，七发探针，每一发都在推翻上一发的范围）**
+
+| 发 | 干了什么 | 读数 | 结论（含被推翻的） |
+| --- | --- | --- | --- |
+| p79 | 只扫前端 dist（64 个 js/css/html，4,903,891 B）问"还有哪些 API 需要壳配合" | 21 个模式里只有 `PaymentRequest` 命中 1 个文件，`getUserMedia` **0 命中** | ~~"页面不用媒体、不用剪贴板读、不用全屏"~~ —— 被下一发打脸：壳日志里有 **14 条 `mic ::`**（最近 10-22 14:15:56）⇒ 语音真发过 `getUserMedia`，**说明我扫的面不够** |
+| p80 | 问"真在跑的那份页面代码到底在哪" | 盘上只有 **1 份** `dsh-web-frontend/dist`（`index-CN7NIWNw.js` 939,867 B / md5 `3b8660f4…`）；但整个包树 12,373 个 js 里 `mediaDevices` 命中在 **`dsh-experimental-client-ui-voice-input/lib/client.js`** | **语音不在前端 dist 里，在另一个包里** ⇒ "页面"= dist + 所有往页面注入 UI 的包 |
+| p81 | 想把两摊合起来扫，**我把 dist 路径拼错了**（`ROOT` 少一层 `dsh`）| `待扫文件=227（其中前端 dist 0 个）`；④ 那节空 | 这一发的"0"是我的路径错，不是页面没有 —— 但它顺手翻出**57 个 `*client-ui*` 包**这一整摊 |
+| p82 | 路径修好，重扫 **186 个文件 / 29,396,960 B** | `createObjectURL` 5 个文件、`new Blob` 6、`toDataURL` 2、`.download` 4、`clipboard.writeText` 5、`clipboard.readText` 2、`fullscreenElement` 1、`exitFullscreen` 1、`getUserMedia`/`MediaRecorder`/`enumerateDevices` 各 1（都在语音包）；`requestFullscreen` **0**、`navigator.geolocation` 0、`new Notification` 0、`serviceWorker` 0、`navigator.wakeLock` 0、`navigator.share` 0、`window.print` 0、`webkitdirectory` 0 | **上一轮那句"前端根本不用 blob"按范围作废**（真页面在用）；"没人走 HTML5 全屏 API"这条**仍然成立**（`requestFullscreen` 0 命中）⇒ 0.10 那条 `onShowCustomView` 的用户是 **`<video>` 的原生全屏**，不是 Fullscreen API |
+| p83 | 在五个文件里取"下载"的原文窗口 | **五个窗口全空** | 不是页面没有 —— 是我 `grep -F` 配 `.{0,60}`，加了 `-F` 量词就成字面量。已进 AGENTS.md 已知坑；同一支脚本修好后重跑记在 p84 |
+| p84 | 同一支脚本（修好正则）重跑 | pdf / excel / conversation 里读到 `URL.createObjectURL(new Blob([…]))` 多处、`input.click()` / `a.click()` | 但 `\.download=` 仍空 ⇒ 判据还是太严（等号两边有空格、React 是对象键）→ p85 |
+| p85 | 用宽松正则在 184 个文件上重跑，并把命中落到**哪个包** | **`a.download = filename` 在 `dsh-client-ui-sidebar-documentpreview/lib/client.pdf.js`**（`if ("download" in a) a.download = filename;`）；`createElement("a")` 也只在这一个包；`window.open(` 在 **6 个包**（chat / settings-account / sidebar-browser / excel / …）；`download:` 对象键 1 处是设置页那句**翻译串**（`t("desktop.update.downloadFailed")`），不是下载 | **下载这条有真实用户，且名字就在页面手里** ⇒ ④ 那一发改名通道不是锦上添花，是 pdf"下载"按钮的正名 |
+| p86 | 问"`onShowCustomView` 到底给谁用"（`<video>` 全屏不走 Fullscreen API，走的就是它） | `<video` 命中 **1 个文件**：`dsh-client-ui-sidebar-documentpreview/lib/client.js`；`srcObject` 0、`new Audio(` 0、`requestPictureInPicture` 的字面量在前端 dist 两处（**多半是 sanitize 白名单里的属性名，没定位，不当结论**） | 全屏那条也有真实用户：**文档预览里的视频** |
+
+**五、那张清单（他点名要的"没做的东西，写清楚到底是怎么回事"）**
+
+| # | 是什么 | 现在什么状态 | 为什么这样 | 对他有什么影响 |
+| --- | --- | --- | --- | --- |
+| 1 | 附件（点加号选文件/图片） | ✅ 0.8/0.9 接完，链跑到第 7 格 | —— | **只差他按一次"发送"**（第 8 格：字节真过 `:3081`→`:3080`）。他那发测试附件还挂在输入框里 |
+| 2 | 语音输入 | ✅ 0.6 端到端 | —— | 无 |
+| 3 | 页面下载（http / data / blob） | ✅ 0.10 接完，http 与 blob 都实测落盘 | —— | **`data:` 那条只有代码、没实测**（我在真页面上没造出走 data 的那发）；blob 有 **8 MiB 上限**，超了会 toast 一句"太大"并记日志，不会静默失败 |
+| 4 | 网页"从剪贴板粘贴"（`clipboard.readText`） | ❌ 不通（`NotAllowedError`），**WebView 没给壳侧回调** | 不是隐患，是这条 API 在 WebView 里没有可接点 | excel / 终端那两个包里的"粘贴"按钮点了没结果。**绕法现成**：长按 → 系统粘贴，或软键盘的粘贴键（都实测通）。**能做但没做**：拿 `prompt` 通道 + 原生 `ClipboardManager` 给它垫一个桥（约 30 行，风险＝又多一条注入）—— 等他点头 |
+| 5 | HTML5 全屏（`onShowCustomView`） | ✅ 0.10 接完并验 | —— | 用户是文档预览里的 `<video>`；**我没在他的文档预览里真开过一次**（那要动他的会话内容），验的是我注入的同形状元素 |
+| 6 | 复制按钮（`clipboard.writeText`） | ✅ 实测通（不需要壳） | 上一轮我标"未验"是漏，不是隐患 | 无 |
+| 7 | 定位 / 通知 / 后台常驻 / 屏幕常亮 / 分享 / 打印 / 文件夹上传 | 没接，**且全摊 0 个用户**（p82 那 8 个模式各 0 命中） | 前四条在 WebView 里**结构上不通**（没有对应回调或根本没实现），后三条没人调 | 现在没有症状。将来上游哪天真调了 `navigator.geolocation`，表现就是"点了没反应"—— 同族，接法已知（`onGeolocationPermissionsShowPrompt`） |
+| 8 | 相机拍照 | 按设计不通（manifest 无 `CAMERA`，`onPermissionRequest` 只放音频） | 他没要过拍照；加权限要他点头 | 页面里那三处 input 的 `accept` 都不带 `capture` ⇒ 目前不需要 |
+| 9 | `prompt()` 通道没有来源校验（清单里唯一一条**安全**项） | 现状：任何页面（含外站）都能发 `dsh:*` 给壳 | 0.7 就挂着，等他的话说做不做（task #43） | 本轮新增的 `dlname` 也走这条通道 ⇒ 我做了三条限制（只在入口同源注入、只存 6 秒、只当文件名）。**要不要给整条通道加来源校验，还是等他一句** |
+| 10 | 重进后黑屏 10–37 秒、503/502 不自动重试、插件市场那格 | ~~三条老账，都还没修~~ **→ 23:4x 他一句"这三个昨天不是已经修好了吗"，这条按读数拆成三行（下面的 10.1/10.2/10.3）**：市场那条**不是"没修"**，是"病根 10-21 晚改了、屏幕上那一格验收还没拿到"；黑屏与自动重试这两条确实一行代码没动 | 见下面三行 | 我把三条并成一条、还写成"都还没修"，**这条是我自己把账记粗了**（他因此以为整批没做）⇒ 以后这张清单一条一行，改过的部分要单列 |
+| 10.1 | 重进后黑屏 10–37 秒 | ❌ 没修，这条代码一行没动过 | 唯一自动重试的那发管的是"导航压根没开始"（`MainActivity.java:1493-1495`），503/502 那一屏仍只等你手动点重试（`:260-261`）；入口里没有"回一段带自动刷新的 HTML"那段补丁（`grep -c Refresh scripts/dsh-entry.js` = **0**） | 10-20 深夜量到那一发 `21:32:39.226 loadUrl` → `21:33:16.853 才有 page-start`（**37 秒**），此后没再测 —— "卡在哪一层"要他在场才能量（task #25 / #44） |
+| 10.2 | 插件市场一直转圈 | ✅ **取目录那格当场复点是通的**（10-23 00:14 重跑探针 48 → `downloads/p87.txt`：**200 / 7,171,002 B**，586 ms → 250 ms）；病根 10-21 傍晚 14.28 改的 | 屏幕上"不转圈"这件事我仍替代不了他看；但路由层面已经不需要再等那一眼 —— **两发真 GET 都落到了 7.17 MB 的包体**（铁律 3：200 不算，落字节才算） | 他若说"点开还转"，那症状就不在这条路上，去看 10.4 那一发。**这行的旧话（"欠他一眼"）不删**，是被新读数盖过 |
+| 10.4 | 在市场里**装插件**（新撞出来的一格） | ✅ **他 00:2x 一句"能装，我已经测试过了，装了几个插件了，能用，没问题"当场结案** | 我复点到的那一发 `POST /dsh-market/install → 500` 与日志里 `cannot get required service "loader" in inactive context`（北京 23:41:54→58 两行）**仍留在这里当留痕**，但按他的实测**不当成缺陷、不再追**（他划走的子问题本轮不再提） | **连带把 10.2 那格也闭环了**：他能装 ⇒ 市场入口在、目录列出来了、屏幕上没转圈 ⇒ 那条"欠他一眼"不用再等（task #48 划掉） |
+| 10.3 | 报错（503/502）后不自动重试 | ❌ 没修，等他挑走法 | 便宜的走法是入口对主帧导航回带 `Refresh: 2` 的最小 HTML（`tools/deploy-entry.sh` 推上去就生效、不用重装 APK），黑屏那条可能就此一起自愈 | 现在每次都要他自己点"重试"（与 10.1 同一屏） |
+
+**六、我这轮没做什么 + 两件我自己的事故（先说坏的那半）**
+
+- **事故 1（覆盖了旧读数）**：我把新探针的输出写进了 `downloads/p75.txt`，**覆盖了 14.33 引用过的那一份**。已按原脚本 `scripts/dsh-session-calls-probe75.sh` 重跑生成：**10,645 B / 47 行 / 42 条 `[bash] command:`**，14.33 引的两条（`host-backups/9dac90ce…` 与 `setsid … kill -TERM 26114`）都在。**差的 1 字节我没定位到** ⇒ 这条只能记成"内容经抽查等价、字节数差 1"，不能记成"完全复原"。规矩已进 AGENTS.md（落盘前先查同名）。
+- **事故 2（在他机上留下的痕迹，逐条交代）**：① **他的系统剪贴板现在是我写的串**（先后两次：`你好`、`剪贴板复点-2257`）—— 他原来剪贴板里是什么我没读（读不出来，见清单第 4 条），所以**没覆盖他的内容可说，但也没法保证**；② **我唤了屏**（`input keyevent 224`）并看到锁屏界面 —— **我没解锁、没碰 PIN、没进锁屏**，后面的复点是 App 在 `onPause` 状态下完成的（壳 0.4 起不 `pauseTimers`，`document.visibilityState` 仍 `visible`）；③ 建过又删净的：`/sdcard/Download/` 里 3 件测试下载件（`vendor-DV2921Zo.css`、`页面起名-测试-01.css`、`blob-改名复点.txt`）、页面里 2 个注入锚点 + 1 个临时 textarea（删后 `left=0` / `残留框=0`）。**留着没删的只有** `dsh-upload-test.{txt,png}` 两件（第 8 格还要用）。
+- **没做的**：前端一行没动；manifest 权限一个没加；`data:` 那条路没实测；剪贴板读没垫桥；`onGeolocationPermissionsShowPrompt` 没接（0 用户）；没在他的会话里发过任何消息、没打开他的文档预览点"下载"；他那批（`/data/local/tmp`、cordis、锁屏、自启开关、purge 那 42 个文件与 56 份备份）**一个没碰**；chroot `/root` 里探针残留仍是 **2 个**（`doh-hosts.sh`、`dsh-entry-check.sh`，都不是本轮建的）。
+- **PC 侧新增**：探针 `scripts/dsh-capability-scan-probe79.sh`–`probe86.sh`（8 支，全只读）与读数 `downloads/p79.txt`–`p86.txt`；`downloads/dsh-shot-dl-01.png`（那张锁屏截图，只为判断"有没有把锁屏叫醒"）。`downloads/` 不入库。
+
+**七、这一代的现场读数（写文档时当场取的）**：壳 **0.10**（`versionName=0.10`、`lastUpdateTime=2026-10-22 22:51:43`、机上 `base.apk` 160,359 B / sha `d4476e4e…`＝本地件）→ 入口 pid **10326**（`etime 11:46:49`）→ 引擎 pid **4409**（`etime 08:31:06`）；`:3080` 裸打 **401/68 B**、`:3081` 无 cookie **404/10 B**（设计如此）；`shell.log` 到 22:55 共 962 行。
+
+**八、git**：本轮代码（`MainActivity.java` / `AndroidManifest.xml` / `app/build.sh`）＋ 8 支探针 ＋ 三份文档 **全部未提交**（他说提交我才提交），提交号回来填死。
+
+### 14.36 他一句"重进后黑屏、报错不自动重试、插件市场一直转 —— 这三个昨天不是已经修好了吗"：我复点了那张表，**其中一条是我记错的**，另两条当场重跑一发探针给出新读数（2026-10-23 00:1x，手机在场，探针 48 重跑 → `downloads/p87.txt`）
+
+**一、先认那半条我记错的**：14.35 五那张清单的第 10 行我把**三条并成一行、还写成"都还没修"**。市场这一条**不是没修**：病根（域名没钉 + 第一源取不到）是 10-21 傍晚 14.28 改的，端到端读数也是那天晚上的（14.30 四，p48）。**这是我自己的文档把账记粗了**，不是他记性错。已经在那张表上就地拆开（第 10 行旧话不删、加箭头，下面新增 10.1 / 10.2 / 10.3 三行）。
+
+**二、当场重跑一发老探针复点"现在到底通不通"**（`bash tools/run-probe.sh scripts/dsh-market-route-probe48.sh downloads/p87.txt`，纯只读，没点「应用」、没装包、没改 hosts、没重启）：
+
+- **取目录这条路是通的**：`GET :3081/dsh-market/registry` 两发都是 **200 / 7,171,002 B**，第 1 发 **586 ms**、第 2 发 **250 ms**（缓存生效），`ct=application/json`；顶层键 `registry|hostVersion`。
+- **入口内存里那圈流水还看见一发装插件失败**：`POST /dsh-market/install → 500`（ua 是手机 WebView，origin `http://127.0.0.1:3081`）。插件自己那本日志的两行尾部正对上：**北京 23:41:54 `install modlens: pinned to the registry's latest, 3.27.1`** → **23:41:58 `level=error` `install route error: cannot get required service "loader" in inactive context"`**。
+  ⇒ **"转圈"和"装不上"现在是两种不同的形状**：前者（取目录）按读数已经不在；后者是**装插件时引擎内部拿不到 loader**，这是新撞出来的、我没查的一格（**不是本轮做的动作**：23:41 那两行是别人/别的东西在这台上点的，我只是复点到了）。
+- **服务与残留复点**：引擎 pid **4409**（写文档那会儿同一个号，这发没换代）、`:3080 GET /` = **401 / 68 B**（设计如此）；`log.ndjson` 我这发前后**一字节没长**（7,955 B / 28 行，仍改于 23:41:58）⇒ 我这两发 GET 没被插件记进日志；`.dsh-market/` 里 `discovery-compatibility-v1.json` 1,086,942 B、`state.json` 99 B；`/root` 里 `.sh` 仍 **2 份**（`doh-hosts.sh`、`dsh-entry-check.sh`，都不是本轮建的）；入口计数 `req=9485 denied=2 injected=12 injectMiss=0 up401=0 reauth=0 ws=48 engineStart=3 exit=2`。
+- **顺带把这四批包的现状也复点了一遍**（`apt-get -s`，一个字节没写）：pip / 编译 / 媒体文档 / 杂项四批**现在全是 `0 upgraded, 0 newly installed`**（= 状态 32 那轮装的都还在），`perl-base` 已是 `5.38.2-3.2ubuntu0.6`，`git version 2.43.0`、`Python 3.12.3`；`/var/cache/apt/archives` 攒了 **245,756 KB / 336 个 .deb**（清不清仍归他，task #54）。
+
+**三、那"没修"的两条，凭什么说没修（当场可复点的证）**：
+
+- **报错（503/502）后不自动重试**：入口源码里根本没有"回一段带自动刷新的 HTML"那段补丁 —— `grep -c Refresh scripts/dsh-entry.js` = **0**；壳这边 `MainActivity.java:260-261` 读到 503/502 只是 `showPanel(...)` 弹一屏等他手动点"重试"。⇒ 便宜的走法（改入口、不用重装 APK）一直没落地，就是 task #44 那格。
+- **重进后黑屏 10–37 秒**：唯一在自动重试的是**另一种症状** —— `loadUrl` 之后一直没开始导航（`MainActivity.java:1493-1495`，额度 2 次），它管不到"页面已经开始加载但十几秒不出东西"。37 秒那一发是 10-20 深夜量的（`21:32:39.226` 已 loadUrl → `21:33:16.853` 才有 page-start），此后没再测，因为"卡在哪一层"要他在场才量得到（task #25）。
+  ⇒ 这两条我**可以现在就修**（入口回带 `Refresh: 2` 的最小 HTML，一条 deploy 就生效，还能顺手把 #25 那半自愈），只是走法归他挑，我一直没自己动。
+
+**四、我这发没做什么**：只发了两发真 GET 给市场路由（探针自己就干这个）＋ 若干只读统计；**没点「应用」、没装包、没卸包、没清 apt 缓存、没动 hosts、没重启引擎或入口、没在他的会话里发过任何消息**；23:41 那两行 install 记录**我没追**（不是本轮该做的动作，先如实报形状）。代码与文档**全部未提交**。
+
+**五、00:2x 他一句"能装，我已经测试过了，装了几个插件了，能用，没问题"（旧话不删，就地结案）**
+
+这一句同时把两格关掉：**装插件可用**（我 00:14 复点到的那一发 `install → 500` 与那两行 `inactive context` 日志只留作一次尝试的留痕，**不当缺陷、不再追** —— 他划走的子问题本轮不再提），**市场屏幕上也不转圈**（他能列出目录并装了几个 ⇒ 14.28/14.30 欠的那"一眼"由这句话补上，task #48 划掉）。
+**我这边判据的次序记死**：真实使用 > 日志里的一发红。这条与我自己的铁律 3"通只认落字节"不冲突 —— 他那几发安装是比我这两发 GET 更硬的落字节证据。
+**还剩的两格不受影响**：黑屏十几秒、报错（503/502）后不自动重试 —— 这两条代码一行没动，走法等他挑（14.36 三）。
+
+**六、00:3x 他一句"就这样吧，等我使用过程中出现问题了再调整再说"**
+
+这条把**最后两格也按挂起处理**：黑屏十几秒、报错后不自动重试 —— **我不主动改代码，也不再回头问"要不要改"**（与 14.33 之后 purge 那档同一走法）。要动的时候判据现成，就是本节三那两条：入口对主帧导航回带 `Refresh: 2` 的最小 HTML（`tools/deploy-entry.sh` 推上去就生效，不用重装 APK）；黑屏那段时间入口回的正是要等的 503，两条同源。
+**留在他手上的现场只有一个**：工作台输入框里那发待发附件 `dsh-upload-test.txt`（92 B）＋ `/sdcard/Download/dsh-upload-test.{txt,png}` 两件测试文件 —— 他哪天按下发送我就补最后一格读数，不说撤我就先留着（**不替他清，也不替他点**）。

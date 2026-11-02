@@ -14,8 +14,8 @@ ADB="${DSH_ADB:-C:/Users/周海龙/DeskBox/我的桌面/platform-tools/adb.exe}"
 KS_PASS="${DSH_KS_PASS:-dsh-local-2026}"
 PKG=com.zhl.dsh
 MIN_API=26
-VER_CODE=7
-VER_NAME=0.7
+VER_CODE=10
+VER_NAME=0.10
 
 cd "$(dirname "$0")"
 # Git-Bash 会把 /data/local/tmp/x 这种参数改写成 D:/program files/Git/data/local/tmp/x 再交给 adb

@@ -213,7 +213,51 @@ async function main() {
       console.log('已合成一次触摸滚动 x=' + SX + ' y=' + SY + ' dy=' + SDY + ' ⇒ ' + JSON.stringify(r || {}));
     }
   }
-  const secs = click && !watch ? 6 : watch;
+  // --setfile "选择器=设备上的绝对路径"：绕过系统选择器，直接往 input[type=file] 里塞一个文件。
+  // 为什么要它：选择器开不开，logcat 已经能看了；但"页面到底能不能读出这玩意的字节"这一格，
+  // 原来只能靠他在手机上真点一下才能验。这一发把最后这条链路拆开问：DOM 里有没有这个 File、
+  // JS 能不能 slice 出内容、页面接着发了什么请求 —— 全是机器读数，不用碰他的相册。
+  // 注意它给的是 **文件路径**（走 file 通道），不是 content:// ⇒ 它证的是"读出字节 + 上传通道"这两段，
+  // content:// 那一格仍需他真点一次选择器才算数。
+  const setfile = arg('setfile');
+  if (typeof setfile === 'string') {
+    await cdp.send('DOM.enable').catch(() => {});
+    const eq = setfile.lastIndexOf('=');
+    const sel = setfile.slice(0, eq), fp = setfile.slice(eq + 1);
+    const doc = await cdp.send('DOM.getDocument', { depth: -1 });
+    const hit = await cdp.send('DOM.querySelector', { nodeId: doc.root.nodeId, selector: sel });
+    if (!hit || !hit.nodeId) console.log('!! 页面上没有这个元素：' + sel);
+    else {
+      // 先挂一个 change 探针：塞完文件页面到底有没有"收到通知"，这是前端那一侧的读数，
+      // 和 files.length 那种 DOM 读数分开看，才知道断在哪一段。
+      // 元素引用要**当场存进 window**：这个输入框是 React 渲染的，塞完之后它可能整只换掉，
+      // 再去 querySelector 拿到的是新壳（files 自然是 0），那读的是"我们没塞进去"的假证。
+      await cdp.send('Runtime.evaluate', { expression: `(() => { const el = document.querySelector(${JSON.stringify(sel)});
+        if (!el) return 'NO'; window.__dshFileEv = []; window.__dshFileEl = el; window.__dshCaptured = [];
+        el.addEventListener('change', () => { window.__dshFileEv.push('change ⇒ files=' + el.files.length);
+          window.__dshCaptured = [...el.files]; });
+        return 'hooked'; })()`, returnByValue: true });
+      await cdp.send('DOM.setFileInputFiles', { nodeId: hit.nodeId, files: [fp] });
+      // 这一发是浏览器进程 → 渲染进程的一条异步 IPC：setFileInputFiles 立刻 resolve，
+      // 但 FileList 落到 DOM 上是晚一点的事。所以读回要分三次隔时问，别把"还没到"读成"上不去"。
+      const js = `(async () => { const f = (window.__dshCaptured || [])[0];
+        const live = window.__dshFileEl && window.__dshFileEl.files ? window.__dshFileEl.files.length : 'no ref';
+        if (!f) return JSON.stringify({captured: (window.__dshCaptured || []).length, live, ev: window.__dshFileEv || '-'});
+        let head = '读不出';
+        try { head = (await f.slice(0, 64).text()).slice(0, 64); }
+        catch (e) { head = 'ERR ' + e.name + ': ' + String(e.message).slice(0, 90); }
+        return JSON.stringify({captured: (window.__dshCaptured || []).length, live, name: f.name, size: f.size, type: f.type || '-', head}); })()`;
+      const waits = [120, 1200, 2500];
+      for (let i = 0; i < waits.length; i++) {
+        await new Promise((r) => setTimeout(r, waits[i]));
+        const r = await cdp.send('Runtime.evaluate', { expression: js, returnByValue: true, awaitPromise: true, userGesture: true });
+        const v = r.result ? r.result.value : JSON.stringify((r.exceptionDetails || {}).exception || r.exceptionDetails);
+        console.log(`+${waits[i]}ms 页面读到：${v}`);
+        if (v && !/"captured":0/.test(v)) break;
+      }
+    }
+  }
+  const secs = (click || typeof setfile === 'string') && !watch ? 6 : watch;
   if (secs > 0) {
     console.log(`盯着页面 ${secs} 秒（这期间请在手机上操作）…`);
     const until = Date.now() + secs * 1000;

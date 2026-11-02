@@ -1,6 +1,9 @@
 package com.zhl.dsh;
 
 import android.app.Activity;
+import android.app.DownloadManager;
+import android.content.ClipData;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -9,9 +12,12 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.os.ParcelFileDescriptor;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -21,6 +27,7 @@ import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.webkit.CookieManager;
+import android.webkit.DownloadListener;
 import android.webkit.JsPromptResult;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
@@ -39,9 +46,12 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLDecoder;
+import java.util.ArrayList;
 
 /**
  * dsh 的手机本机壳 —— 「点开就能用」那一档。
@@ -103,6 +113,35 @@ public class MainActivity extends Activity {
     private long micRev = 0;
     private boolean micAnswered = false;
     private static final int REQ_MIC = 0x6d69;   // 'mi'
+
+    // 0.8 为"点加号 → 添加文件/图片"加的这条链。为什么必须有这个回调：
+    // WebChromeClient.onShowFileChooser 的**默认实现直接 return false**（= App 不肯开选择器），
+    // Chromium 收到 false 就把这一发丢掉 —— 不报错、不发请求、页面不动，正好是他 10-22 报的形状。
+    // 取证在 RUNBOOK 14.34：页面侧确实调了 input[type=file].click()（CDP 钩子记到 1 条），
+    // 而清空后的 logcat 里一条 START … GET_CONTENT 都没有 ⇒ 断点在壳，不在前端、也不在入口。
+    // 系统侧不是问题：`cmd package query-activities -a GET_CONTENT -t "*/*"` 当场数到 **20** 个可解析组件
+    //（PhotoPicker + DocumentsUI 都在）。
+    private ValueCallback<Uri[]> fileCb = null;
+    private static final int REQ_FILES = 0x6669;   // 'fi'
+    private static final int FILES_MAX = 20;       // 一次最多交回多少个（multiple 时前端能一次收多张图）
+
+    // 0.10 为 HTML5 全屏加的三个字段。病根和 0.5 之前那条麦克风、0.8 之前那个加号是**同一个**：
+    // WebChromeClient.onShowCustomView 的默认实现是"把这一发直接退回"（调 cb.onCustomViewHidden() 就完事），
+    // 所以页面里 requestFullscreen() 看着像"没反应"，网页侧一条错误都不留。取证与三件对照见 RUNBOOK 14.35。
+    // fullscreenBox = root 上压在 WebView 上面那一层；fullscreenView = Chromium 交过来的那个 View；
+    // fullscreenCb = 退出时要还给它的那把回执（不调的话页面以为自己还在全屏里，按钮状态会错位）。
+    private View fullscreenView = null;
+    private WebChromeClient.CustomViewCallback fullscreenCb = null;
+    private FrameLayout fullscreenBox = null;
+
+    // 0.10 为"下载文件名"补的两个字段。为什么要有：22:46:21 那条读数写明 WebView 交过来的
+    // Disposition=(空串) —— 页面在 <a download="会话-22.md"> 里起的名字**不会**顺着 onDownloadStart 传给我们
+    //（桌面 Chrome 会，WebView 这条路只给 URL/MIME/大小）。不另想办法，名字就只能从 URL 尾巴猜：
+    // http 那条勉强能用，blob: 那条会落成一个 UUID（22:36:36 实测就是这样）。
+    // 值只在 6 秒内有效，且只当文件名用（进 sanitizeName 洗一遍才落盘）。
+    private volatile String pendingDlName = null;
+    private volatile long pendingDlAt = 0;
+    private String fileNameSource = "";        // 最近这一发的名字是哪来的（只进日志，好让下次复点看得出断点）
 
     /**
      * 壳自己的一条日志通道：adb logcat -s dsh-app:V 就能看见"点了图标之后到底走到哪一步"。
@@ -235,6 +274,8 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 panel = false;                     // 真页面出来了，那屏说明就该翻篇
                 L("page-finish", url + "｜标题=" + view.getTitle() + "｜进度=" + view.getProgress());
+                // 0.10：只在还在入口这一源的时候挂那个"把 download 属性记回来"的监听（外站页面不挂）
+                if (url != null && sameEntry(Uri.parse(url))) injectDownloadNameHook();
             }
         });
 
@@ -304,12 +345,109 @@ public class MainActivity extends Activity {
                     L("mic", "页面自己撤回了这次授权请求 ⇒ 待决的那个已作废");
                 }
             }
+
+            /**
+             * 0.8：页面里 <input type=file> 被点时，WebView 唯一能把"开系统选择器"这件事交给 App 的出口。
+             * 0.7 及之前这个回调根本没实现 ⇒ 走 WebChromeClient 默认实现（return false）⇒ 点了没反应。
+             * 与 0.5 之前那条麦克风是同一个病的两种症状：**这类"没实现"在网页侧一律不留错误**，
+             * 所以判它不能看页面有没有报错，只能看 native 有没有收到这一发。
+             * 用 params.createIntent() 而不是自己拼 ACTION_GET_CONTENT：accept 与 multiple 都在 params 里，
+             * 自己拼会把前端写死的那些 accept 丢掉（插件/技能上传那一格是 .zip,.tgz,.tar.gz,.tar,.skill）。
+             */
+            @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
+                                             FileChooserParams params) {
+                if (fileCb != null) {
+                    L("files", "上一个选择器还没交付 ⇒ 先把它结掉（不然页面一直等，第二次点连 click 都不发）");
+                    ValueCallback<Uri[]> stale = fileCb;
+                    fileCb = null;
+                    stale.onReceiveValue(null);
+                }
+                Intent pick;
+                try {
+                    pick = params.createIntent();
+                } catch (Exception e) {
+                    L("files", "params.createIntent() 这一步就失败（" + e.getClass().getSimpleName() + "）⇒ 这一发作废");
+                    callback.onReceiveValue(null);
+                    return false;
+                }
+                boolean multi = pick.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false);
+                String[] types = params.getAcceptTypes();
+                L("files", "要开选择器：" + pick.getAction() + "｜多选=" + multi
+                        + "｜accept=" + (types == null || types.length == 0 ? "(没限定)" : join(types)));
+                try {
+                    startActivityForResult(Intent.createChooser(pick, "选择文件"), REQ_FILES);
+                    fileCb = callback;
+                    return true;
+                } catch (Exception e) {
+                    L("files", "startActivityForResult 失败（" + e.getClass().getSimpleName()
+                            + "）⇒ 这一发就地作废，别让页面等着");
+                    callback.onReceiveValue(null);
+                    return false;
+                }
+            }
+
+            /**
+             * 0.10：页面里某个元素（<video>、<div>、整个 body）要"真全屏"时，Chromium 唯一能把这件事
+             * 交给 App 的出口。0.9 及之前没实现 ⇒ 走 WebChromeClient 默认实现：直接调
+             * cb.onCustomViewHidden() 把这一发退回 ⇒ 页面那边 requestFullscreen() 的 Promise 照样 resolve、
+             * 但屏幕什么变化没有，fullscreenElement 也读不回东西 —— 这就是他说的"没实现，不是坏了"。
+             *
+             * 为什么用同一个 root 上加一层，而不是新开一个 Activity：交过来的这个 View 还挂在 Chromium 的
+             * WebView 上（它内部有渲染纹理与事件通道），换个 Activity 的 contentView 就等于换了文档宿主，
+             * 视频会从关键帧重来、页面状态一起丢。Chromium 要的只是"这个 View 换个爹、铺满屏"。
+             * web 藏起来（GONE）而不是移到后面：留着它，透明区域会把底下的工作台透出来。
+             */
+            @Override
+            public void onShowCustomView(View view, WebChromeClient.CustomViewCallback cb) {
+                if (fullscreenView != null) {
+                    L("fs", "已经在全屏层里，页面又递来一发 ⇒ 先退掉上一层再进这一层");
+                    exitFullscreen("上一层还没退");
+                }
+                if (root == null || fullscreenBox == null || view == null) {
+                    L("fs", "root/fullscreenBox/view 有一个不在位 ⇒ 这一发只能退回（页面会读到 fullscreenElement=null）");
+                    hideFullscreenCb(cb);
+                    return;
+                }
+                fullscreenView = view;
+                fullscreenCb = cb;
+                fullscreenBox.removeAllViews();
+                fullscreenBox.addView(view, new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+                fullscreenBox.setVisibility(View.VISIBLE);
+                if (web != null) web.setVisibility(View.GONE);
+                goFullscreen();                       // 进来的时候系统栏可能已被用户下滑叫出来，再收一次
+                L("fs", "已进入页面元素全屏：" + view.getClass().getSimpleName()
+                        + "｜全屏层已铺满 root｜WebView 已置 GONE");
+            }
+
+            /** 页面自己退出全屏（Esc、点"退出全屏"、元素被卸载、文档被换掉都走这里）。 */
+            @Override
+            public void onHideCustomView() {
+                exitFullscreen("页面自己要求退出");
+            }
+        });
+
+        // 0.10：页面里"下载"这颗按钮的唯一出口。不接的话走 WebView 默认行为 = **什么都不发生**
+        //（既不落盘也不报错，也不交给系统浏览器），和加号/麦克风/全屏是同一族的第五种形状。
+        web.setDownloadListener(new DownloadListener() {
+            @Override public void onDownloadStart(String url, String userAgent, String contentDisposition,
+                                                  String mimeType, long contentLength) {
+                onPageDownload(url, userAgent, contentDisposition, mimeType, contentLength);
+            }
         });
 
         // 0.5：WebView 外面套一层 FrameLayout，只为给"再按一次返回退出"那枚浮层一个落点。
         // 为什么不画进页面里：那是前端的地盘，页面一重绘/一刷新我们的提示就没了，而且它得跟着 Activity 的生命周期走。
         root = new FrameLayout(this);
         root.addView(web, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        // 0.10：页面元素全屏那一层也落在 root 上，addView 在后面 ⇒ 压在 WebView 上面（谁后加谁在上）。
+        // 一开始就建好、先置 GONE：onShowCustomView 来的时候不用再等布局，也不会因为刚 add 就闪一帧。
+        fullscreenBox = new FrameLayout(this);
+        fullscreenBox.setBackgroundColor(Color.BLACK);
+        fullscreenBox.setVisibility(View.GONE);
+        root.addView(fullscreenBox, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -494,6 +632,480 @@ public class MainActivity extends Activity {
         finishMic(ok, micRev);
     }
 
+    /**
+     * 0.8：系统选择器回来了（选中文件 / 用户按返回取消）。
+     * **三种结果都必须把 fileCb 结掉**，尤其是"取消"那一发 —— 不调 onReceiveValue(null) 的话，
+     * WebView 里那个 input 会永远停在"正在选"，下一次点加号连 click 都不发出去，
+     * 症状和这次报的一模一样，但成因变成自家壳留了个洞。
+     */
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_FILES) return;
+        ValueCallback<Uri[]> cb = fileCb;
+        fileCb = null;
+        if (cb == null) {
+            L("files", "选择器回来了，但手里没有待交付的回调（多半是中途换了文档）⇒ 忽略这一发");
+            return;
+        }
+        Uri[] urls = null;
+        if (resultCode == RESULT_OK && data != null) {
+            ArrayList<Uri> got = new ArrayList<Uri>();
+            ClipData clip = data.getClipData();
+            if (clip != null) {
+                for (int i = 0; i < clip.getItemCount() && got.size() < FILES_MAX; i++) {
+                    Uri u = clip.getItemAt(i).getUri();
+                    if (u != null) got.add(u);
+                }
+            } else if (data.getData() != null) {
+                got.add(data.getData());
+            }
+            if (!got.isEmpty()) urls = got.toArray(new Uri[0]);
+            L("files", "选中 " + (urls == null ? 0 : urls.length) + " 个（上限 " + FILES_MAX
+                    + "）｜首个=" + (urls == null ? "-" : urls[0].getScheme() + "://" + urls[0].getAuthority()
+                    + "，路径 " + urls[0].getPath().length() + " 字符"));
+        } else {
+            L("files", "结果码=" + resultCode + "（用户取消或没选中）⇒ 交 null 给页面，把这一发结清");
+        }
+        // 0.9 壳侧复点：只问"这张临时通行证开不开得开、里面有多少字节"，内容仍旧由 WebView 自己取，
+        // 数据路径没有多加一层间接。为什么要它：CDP 那条 --setfile 已经证明"壳把文件路径交给页面之后，
+        // 页面读得出字节"（89 B 的文件、头 64 字符原样读回），但它走的是 file 通道，证不了 content://。
+        // 他点一次选择器只够问一个问题；有了这三行，同一次点击同时答出"通行证有没有效"和
+        // "WebView 传不传得出去"两段，万一断链，断在哪一格一眼可见，不用再让他点第二次。
+        if (urls != null) {
+            for (int i = 0; i < urls.length && i < 3; i++) {
+                String detail;
+                try {
+                    String mime = getContentResolver().getType(urls[i]);
+                    ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(urls[i], "r");
+                    long sz = pfd == null ? -1 : pfd.getStatSize();
+                    if (pfd != null) pfd.close();
+                    detail = "打得开｜" + (mime == null ? "类型未知" : mime) + "｜"
+                            + (sz < 0 ? "长度问不出" : sz + " B");
+                } catch (Exception e) {
+                    String m = String.valueOf(e.getMessage());
+                    if (m.length() > 90) m = m.substring(0, 90);
+                    detail = "打不开：" + e.getClass().getSimpleName()
+                            + ("null".equals(m) || m.isEmpty() ? "" : "（" + m + "）");
+                }
+                L("files", "壳侧复点 #" + i + " ⇒ " + detail);
+            }
+        }
+        cb.onReceiveValue(urls);
+    }
+
+    // ── 0.10 其一：页面元素全屏（onShowCustomView 那条路的另一半）──────────────────
+
+    /** 回执只调一次；页面早就撤了时它会抛，抛了说明这一发本来就不需要回执，不用留证据。 */
+    private static void hideFullscreenCb(WebChromeClient.CustomViewCallback cb) {
+        if (cb == null) return;
+        try {
+            cb.onCustomViewHidden();
+        } catch (Exception alreadyGone) {
+            // 这一发在 Chromium 那边已经不成立了，没什么可交付的
+        }
+    }
+
+    /**
+     * 退出页面元素全屏：撤那一层、把 WebView 放回来、给 Chromium 回那份执。
+     * 为什么"手里没有全屏层"也要能进这个方法：onHideCustomView 是页面自己发的，它可能在我们没进过
+     * 全屏的情况下补发一次（换文档、组件卸载）。这种情况只结回执、不动画面，不然会把正常的一屏误撤掉。
+     */
+    private void exitFullscreen(String why) {
+        WebChromeClient.CustomViewCallback cb = fullscreenCb;
+        fullscreenCb = null;
+        boolean had = fullscreenView != null;
+        if (had) {
+            if (fullscreenBox != null) {
+                fullscreenBox.removeAllViews();
+                fullscreenBox.setVisibility(View.GONE);
+            }
+            fullscreenView = null;
+            if (web != null) web.setVisibility(View.VISIBLE);
+        }
+        hideFullscreenCb(cb);
+        L("fs", why + " ⇒ " + (had ? "全屏层已撤，WebView 重新可见" : "手里本来没有全屏层，只把回执结掉"));
+    }
+
+    // ── 0.10 其二：页面里的"下载"那颗按钮 ────────────────────────────────────────
+
+    /**
+     * 页面要下载一个文件时，壳这边唯一能收到这一发的地方。0.9 及之前根本没设监听
+     * ⇒ WebView 的默认行为是**什么都不做**（不落盘、不报错、也不甩给系统浏览器）。
+     *
+     * 三种源分开走，因为它们的"取得到取不到"根本不是一回事：
+     * ① http(s):// —— 交系统 DownloadManager 去取。它是**另一个进程**，读不到我们 WebView 的
+     *    CookieManager，而入口 :3081 没有 cookie 就是 404/401，所以必须把那份 dsh-auth cookie
+     *    抄成请求头（抄长度进日志、值不抄，口径同 openEntry）。
+     * ② data: —— 字节就写在 URL 里，解出来自己落盘，不碰网络。
+     * ③ blob: —— URL 里**没有内容**，字节只活在渲染进程那块内存上，DownloadManager 取它必失败；
+     *    唯一的出路是在页面里 fetch 它自己那个 blob（同源，页面自己有权限），FileReader 转 base64，
+     *    再分段捞回 Java 侧落盘。这不是"多垫一层"，是 blob 这条路只有这一个出口（上限见 BLOB_MAX）。
+     *
+     * 落点统一是公共 内部存储/Download/：① 走 DownloadManager 的 external public dir，
+     * ②③ 走 MediaStore（API 29+ 免存储权限）⇒ 这个 App 到现在仍然没申请任何存储权限。
+     */
+    private void onPageDownload(final String url, String userAgent, String contentDisposition,
+                                final String mimeType, long contentLength) {
+        String name = fileNameFrom(contentDisposition, url);
+        String from = fileNameSource;
+        // Disposition 是空的（这台机的 WebView 就是这样，见上面那两个字段的注释）⇒ 用页面 6 秒内报给我们的名字
+        if (empty(contentDisposition) && pendingDlName != null
+                && System.currentTimeMillis() - pendingDlAt < 6000) {
+            String memo = sanitizeName(pendingDlName);
+            pendingDlName = null;
+            if (!memo.equals(name)) {
+                name = memo;
+                from = "页面 download 属性（prompt 通道记回来的）";
+            }
+        }
+        L("download", "页面要下载｜源前缀=" + prefixOf(url) + "｜文件名=" + name + "｜名字来自=" + from
+                + "｜类型=" + (empty(mimeType) ? "(页面没给)" : mimeType)
+                + "｜页面报的大小=" + (contentLength < 0 ? "未知" : human(contentLength))
+                + "｜Disposition=" + (contentDisposition == null ? "(null)"
+                        : contentDisposition.length() == 0 ? "(空串)"
+                        : contentDisposition.length() > 120 ? contentDisposition.substring(0, 120) + "…" : contentDisposition)
+                + "｜URL 尾=" + (url == null ? "-" : url.length() > 60 ? url.substring(url.length() - 60) : url));
+        if (url == null) { L("download", "URL 是空的 ⇒ 这一发作废"); return; }
+        if (url.startsWith("http://") || url.startsWith("https://")) { downloadViaManager(url, userAgent, name, mimeType); return; }
+        if (url.startsWith("data:")) { saveBytes(name, mimeType, bytesFromDataUrl(url), "data:"); return; }
+        if (url.startsWith("blob:")) { readBlobAndWrite(url, name); return; }
+        L("download", "前缀（" + prefixOf(url) + "）不在认识的这三种里 ⇒ 不硬试，已记日志");
+        toast("这个下载链接的格式壳还不认（" + prefixOf(url) + "），shell.log 里留了一行");
+    }
+
+    private void downloadViaManager(String url, String userAgent, String name, String mimeType) {
+        try {
+            DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+            if (dm == null) {
+                L("download", "拿不到系统下载服务（DOWNLOAD_SERVICE 回 null）⇒ 这一发下不了");
+                toast("系统下载服务没拿到，这一发下不了");
+                return;
+            }
+            DownloadManager.Request req = new DownloadManager.Request(Uri.parse(url));
+            if (!empty(userAgent)) req.addRequestHeader("User-Agent", userAgent);
+            String cookie = null;
+            try {
+                cookie = CookieManager.getInstance().getCookie(url);
+            } catch (Exception noCookie) {
+                L("download", "getCookie 这一步就抛了（" + noCookie.getClass().getSimpleName() + "）");
+            }
+            if (!empty(cookie)) {
+                req.addRequestHeader("Cookie", cookie);
+                L("download", "已把 WebView 那份 cookie 抄给下载器（" + cookie.length() + " 字符，值不进日志）"
+                        + "｜不抄的话 Downloader 进程请求本机入口会直接吃 401");
+            } else {
+                L("download", "getCookie 回空 ⇒ 没抄（这一发多半会 401，这行留着当证据）");
+            }
+            req.setTitle(name);
+            req.setDescription(empty(mimeType) ? "dsh 工作台页面下载" : mimeType);
+            if (!empty(mimeType)) req.setMimeType(mimeType);
+            req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name);
+            req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            long id = dm.enqueue(req);
+            L("download", "已交给系统下载器（任务号=" + id + "）⇒ 落 内部存储/Download/" + name);
+            toast("开始下载：" + name + "（完成后通知栏会有一条）");
+        } catch (Exception e) {
+            L("download", "DownloadManager 这条路失败（" + e.getClass().getSimpleName() + "）⇒ 已记日志");
+            toast("下载没起来：" + e.getClass().getSimpleName());
+        }
+    }
+
+    /** data: 里那串字节解出来；解不动就回 null（调用方会当成失败处理，不落一个空文件骗人）。 */
+    private byte[] bytesFromDataUrl(String url) {
+        try {
+            int comma = url.indexOf(',');
+            if (comma < 0) {
+                L("download", "data: 里没有逗号 ⇒ 不是合法的数据 URL，放弃");
+                return null;
+            }
+            String meta = url.substring(5, comma);
+            String body = url.substring(comma + 1);
+            byte[] bytes = meta.toLowerCase().endsWith(";base64")
+                    ? android.util.Base64.decode(body, android.util.Base64.DEFAULT)
+                    : URLDecoder.decode(body, "UTF-8").getBytes("UTF-8");
+            L("download", "data: 解出 " + bytes.length + " B（" + (meta.toLowerCase().endsWith(";base64") ? "base64" : "百分号转义") + "）");
+            return bytes;
+        } catch (Exception e) {
+            L("download", "data: 解码失败（" + e.getClass().getSimpleName() + "）");
+            return null;
+        }
+    }
+
+    // ── blob: 那半条：让页面自己把它的 blob 读成 base64，再分段捞回 Java ──────────
+    private static final int BLOB_MAX = 8 * 1024 * 1024;     // 整份要经过字符串通道，先钉个上限，超了如实说"太大没接"
+    private static final int BLOB_CHUNK = 192 * 1024;        // 一次捞这么多字符（单次 binder 塞太大不稳）
+    private static final int BLOB_POLL_MAX = 80;             // 300ms × 80 ≈ 24 秒还没出货就当它不来了
+
+    private void readBlobAndWrite(final String url, final String name) {
+        String safe = url.replace("\\", "\\\\").replace("\"", "\\\"");
+        L("download", "blob: 这条路只能让页面自己取（上限 " + human(BLOB_MAX) + "）⇒ 已在页面里发起 fetch");
+        try {
+            web.evaluateJavascript(BLOB_FETCH_JS.replace("__URL__", safe).replace("__MAX__", String.valueOf(BLOB_MAX)),
+                    new ValueCallback<String>() {
+                        @Override public void onReceiveValue(String v) {
+                            L("download", "页面回话=" + parseJsString(v) + "｜开始每 300ms 问一次");
+                            pollBlob(name, 0);
+                        }
+                    });
+        } catch (Exception e) {
+            L("download", "往页面发这一发就失败了（" + e.getClass().getSimpleName() + "）");
+            toast("blob 下载没起来：" + e.getClass().getSimpleName());
+        }
+    }
+
+    private void pollBlob(final String name, final int attempt) {
+        if (attempt >= BLOB_POLL_MAX) {
+            L("download", "问了 " + BLOB_POLL_MAX + " 次页面还没出货 ⇒ 放弃（那个 blob 多半已被页面回收）");
+            toast("这个文件页面在 24 秒内没交出来，没落盘");
+            clearBlobSlot();
+            return;
+        }
+        try {
+            web.evaluateJavascript("((window.__dshDl&&window.__dshDl.s)||'gone')", new ValueCallback<String>() {
+                @Override public void onReceiveValue(String v) {
+                    String s = parseJsString(v);
+                    if ("ok".equals(s)) { takeBlobChunk(name, 0, new StringBuilder()); return; }
+                    if ("too-big".equals(s)) {
+                        L("download", "页面报这个 blob 超过 " + human(BLOB_MAX) + " ⇒ 这一版不接（超过上限只能走 http 或 DownloadManager）");
+                        toast("这个文件超过壳给 blob 定的上限（" + human(BLOB_MAX) + "），没落盘");
+                        clearBlobSlot();
+                        return;
+                    }
+                    if ("err".equals(s) || "gone".equals(s)) {
+                        L("download", "页面取 blob 的结果=" + s + "（gone=那个全局槽已经不在了，多半是换了文档）⇒ 放弃");
+                        toast("页面自己没取出这个文件");
+                        return;
+                    }
+                    ui.postDelayed(new Runnable() {
+                        @Override public void run() { pollBlob(name, attempt + 1); }
+                    }, 300);
+                }
+            });
+        } catch (Exception e) {
+            L("download", "问进度这一步抛了（" + e.getClass().getSimpleName() + "）⇒ 放弃");
+        }
+    }
+
+    private void takeBlobChunk(final String name, final int off, final StringBuilder acc) {
+        try {
+            web.evaluateJavascript("(window.__dshDl&&window.__dshDl.b64||'').substr(" + off + "," + BLOB_CHUNK + ")",
+                    new ValueCallback<String>() {
+                        @Override public void onReceiveValue(String v) {
+                            String chunk = parseJsString(v);
+                            if (chunk == null || chunk.length() == 0) {
+                                L("download", "base64 已捞完：共 " + acc.length() + " 字符（分 " + (off / BLOB_CHUNK + 1) + " 段）");
+                                clearBlobSlot();
+                                saveBytes(name, "application/octet-stream", decodeBase64Loose(acc.toString()), "blob:");
+                                return;
+                            }
+                            acc.append(chunk);
+                            if (acc.length() > (long) BLOB_MAX * 2 + 8) {
+                                L("download", "捞到 " + acc.length() + " 字符，已超上限 ⇒ 停手，不落半份文件");
+                                toast("文件超过上限，已停（没落半份）");
+                                clearBlobSlot();
+                                return;
+                            }
+                            takeBlobChunk(name, off + chunk.length(), acc);
+                        }
+                    });
+        } catch (Exception e) {
+            L("download", "分段捞取这一步抛了（" + e.getClass().getSimpleName() + "）⇒ 放弃");
+            clearBlobSlot();
+        }
+    }
+
+    /** 页面里那个临时槽（window.__dshDl）用完就擦：不给他的页面留我的全局变量。 */
+    private void clearBlobSlot() {
+        try {
+            web.evaluateJavascript("delete window.__dshDl", null);
+        } catch (Exception ignore) {
+            // 页面可能已经换掉了，那这个槽本来就不存在
+        }
+    }
+
+    private byte[] decodeBase64Loose(String b64) {
+        try {
+            return android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
+        } catch (Exception e) {
+            L("download", "base64 解码失败（" + e.getClass().getSimpleName() + "），再试一次 NO_WRAP");
+            try {
+                return android.util.Base64.decode(b64, android.util.Base64.NO_WRAP);
+            } catch (Exception again) {
+                L("download", "第二次也失败 ⇒ 这一发不落盘");
+                return null;
+            }
+        }
+    }
+
+    /** ②③ 两条路的落盘：走 MediaStore 写公共 Download/（API 29+ 不需要任何存储权限）。 */
+    private void saveBytes(String name, String mime, byte[] bytes, String srcKind) {
+        if (bytes == null || bytes.length == 0) {
+            L("download", srcKind + " 这条路取回来是空（" + (bytes == null ? "null" : "0 B")
+                    + "）⇒ 不落盘，落一个空文件只会让人以为已经下好了");
+            toast("这个文件没取到内容，没落盘");
+            return;
+        }
+        if (Build.VERSION.SDK_INT < 29) {
+            L("download", "API " + Build.VERSION.SDK_INT + " 没有免权限的 MediaStore 公共目录这条路"
+                    + "（这台机是 35，走不到这条）⇒ " + srcKind + " 这一发没接");
+            toast("这版安卓写不了公共下载目录，没落盘");
+            return;
+        }
+        try {
+            ContentValues cv = new ContentValues();
+            cv.put(MediaStore.Downloads.DISPLAY_NAME, name);
+            cv.put(MediaStore.Downloads.MIME_TYPE, empty(mime) ? "application/octet-stream" : mime);
+            cv.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/");
+            Uri target = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
+            if (target == null) {
+                L("download", "MediaStore.insert 回 null（公共目录被系统挡了？）⇒ 没落盘");
+                toast("系统不肯建这个文件，没落盘");
+                return;
+            }
+            OutputStream os = getContentResolver().openOutputStream(target);
+            if (os == null) {
+                L("download", "openOutputStream 回 null ⇒ 没落盘");
+                return;
+            }
+            os.write(bytes);
+            os.close();
+            L("download", srcKind + " 已自己写盘：" + human(bytes.length) + " → 内部存储/Download/" + name);
+            toast("已下载：" + name + "（" + human(bytes.length) + "，在 内部存储/Download）");
+        } catch (Exception e) {
+            L("download", srcKind + " 写盘失败（" + e.getClass().getSimpleName() + "）");
+            toast("写文件失败：" + e.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * blob 自取那段 JS：为什么写在这边而不是 inject 进页面 —— 它不属于工作台，是壳为了把
+     * 自己收得住的字节捞回来而临时借页面跑的一次 fetch，用完就把 window.__dshDl 删掉。
+     * __URL__ 由调用处填（已把 \ 与 " 逃过），__MAX__ 填 BLOB_MAX。
+     */
+    private static final String BLOB_FETCH_JS =
+            "(function(){try{"
+          + "window.__dshDl={s:'pending',n:0,e:'',b64:''};"
+          + "fetch(\"__URL__\").then(function(r){if(!r.ok)throw new Error('http-'+r.status);return r.blob();})"
+          + ".then(function(b){var d=window.__dshDl;if(!d)return;d.n=b.size;"
+          + "if(b.size>__MAX__){d.s='too-big';return;}"
+          + "var fr=new FileReader();"
+          + "fr.onloadend=function(){var v=String(fr.result);var i=v.indexOf(',');var x=window.__dshDl;"
+          + "if(!x||x.s!=='pending')return;x.b64=i<0?'':v.substring(i+1);x.s=x.b64.length>0?'ok':'err';"
+          + "if(x.s==='err')x.e='data-URL 里没有逗号';};"
+          + "fr.onerror=function(){var x=window.__dshDl;if(x){x.e='FileReader 读不出来';x.s='err';}};"
+          + "fr.readAsDataURL(b);})"
+          + ".catch(function(e){var x=window.__dshDl;if(x){x.e=String((e&&e.message)||e);x.s='err';}});"
+          + "return 'started';}catch(e){return 'throw-'+String((e&&e.name)||e);}})()";
+
+    /** 文件名优先认 Content-Disposition（页面/引擎给的才是正名），退而取 URL 尾巴，再退用时间戳。 */
+    private String fileNameFrom(String cd, String url) {
+        String n = "";
+        if (cd != null) {
+            int i = cd.indexOf("filename*=");                     // RFC 5987 那种：UTF-8''%E4%B8%AD%E6%96%87
+            if (i >= 0) {
+                String v = cd.substring(i + 10).trim();
+                int q = v.indexOf("''");
+                if (q >= 0) v = v.substring(q + 2);
+                n = decodeName(v);
+            }
+            if (empty(n)) {
+                i = cd.indexOf("filename=");
+                if (i >= 0) n = decodeName(cd.substring(i + 9));
+            }
+            if (!empty(n)) fileNameSource = "Content-Disposition（服务端给的）";
+        }
+        if (empty(n) && url != null) {
+            String u = url;
+            int q = u.indexOf('?');
+            if (q >= 0) u = u.substring(0, q);
+            int s = Math.max(u.lastIndexOf('/'), u.lastIndexOf('\\'));
+            if (s >= 0 && s + 1 < u.length()) {
+                n = decodeName(u.substring(s + 1));
+                if (!empty(n)) fileNameSource = "URL 尾巴猜的";
+            }
+        }
+        if (empty(n)) {
+            n = "dsh-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss").format(new java.util.Date());
+            fileNameSource = "时间戳兜底（连 URL 尾巴都没名字）";
+        }
+        return sanitizeName(n);
+    }
+
+    private static String decodeName(String raw) {
+        String s = raw == null ? "" : raw.trim();
+        if (s.length() >= 2 && ((s.startsWith("\"") && s.endsWith("\"")) || (s.startsWith("'") && s.endsWith("'")))) {
+            s = s.substring(1, s.length() - 1);
+        }
+        int semi = s.indexOf(';');                                // 后面可能还挂着 ; size=…
+        if (semi >= 0) s = s.substring(0, semi);
+        try {
+            return URLDecoder.decode(s, "UTF-8");                 // %E4%B8%AD 这种百分号写法还原成正名
+        } catch (Exception badPercent) {
+            return s;                                             // 不是合法转义串就当它是原名
+        }
+    }
+
+    private static String sanitizeName(String n) {
+        String s = n == null ? "" : n.replaceAll("[\\\\/:*?\"<>|\r\n\t]", "_");
+        if (s.length() > 120) s = s.substring(0, 120);            // 别拿一个超长名去撞文件系统的上限
+        return s.isEmpty() ? "dsh-download" : s;
+    }
+
+    /**
+     * 挂在页面里的那只"顺手记名字"的监听（0.10 补）。为什么要它，见上面 pendingDlName 那三行注释：
+     * WebView 的 onDownloadStart 把 <a download="会话-22.md"> 这个属性**丢掉了**（只给 URL/MIME/大小），
+     * 所以只能趁点击事件还在页面里的时候，自己把这个属性读出来，用现成的 prompt 通道递回 Java 侧存一下。
+     *
+     * 三个刻意的选择：
+     * ① 用捕获阶段（addEventListener 第三参 true）：合成点击（a.click()）和真手指点都会走到这，
+     *    而 download 属性归 DOM 元素本身，跟事件冒不冒泡无关；页面自己 stopPropagation 也拦不住这一发。
+     * ② 只往上走父链找第一个带非空 download 属性的节点，不猜别的名字来源（不读 href 尾巴 —— 那正是 URL 猜的活）。
+     * ③ 记到 6 秒就过期（见 onPageDownload），且只当文件名用、过 sanitizeName 才落盘：
+     *    这条通道没有来源校验（task #43 那条老话），所以外站页面不注入（onPageFinished 里 sameEntry 挡），
+     *    名字本身也不进 shell.log 以外的地方，不构成新的暴露面。
+     */
+    private static final String DL_NAME_JS =
+            "(function(){try{"
+          + "if(window.__dshDlHook)return'already';window.__dshDlHook=1;"
+          + "function nameOf(n){while(n){try{"
+          + "var d=n.getAttribute?n.getAttribute('download'):null;"
+          + "if(d&&String(d).trim()!=='')return String(d).trim().slice(0,160);}catch(e){}"
+          + "n=n.parentElement;}"
+          + "return'';}"
+          + "document.addEventListener('click',function(ev){try{"
+          + "var t=ev.target;if(!t)return;"
+          + "var n=nameOf(t.nodeType===3?t.parentElement:t);"
+          + "if(n)prompt('dsh:dlname',n);}catch(e){}},true);"
+          + "return'ok';}catch(e){return'throw-'+String((e&&e.name)||e);}})()";
+
+    /** 只在本机入口这一源上注入（onPageFinished 里判过），失败不抛给用户，只留一行日志。 */
+    private void injectDownloadNameHook() {
+        try {
+            web.evaluateJavascript(DL_NAME_JS, new ValueCallback<String>() {
+                @Override public void onReceiveValue(String v) {
+                    L("dlname", "页面里那只记名字的监听挂载结果=" + v
+                            + "（ok=新挂上／already=这一代文档已经挂过／throw-* 或 null=没挂上，名字只能从 URL 尾巴猜）");
+                }
+            });
+        } catch (Exception e) {
+            L("dlname", "注入这一下就抛了（" + e.getClass().getSimpleName() + "）⇒ 名字只能从 URL 尾巴猜");
+        }
+    }
+
+    private static String prefixOf(String url) {
+        if (url == null) return "(null)";
+        int i = url.indexOf(':');
+        return i < 0 || i > 12 ? url.substring(0, Math.min(12, url.length())) + "…" : url.substring(0, i + 1);
+    }
+
+    private static String human(long b) {
+        if (b < 0) return "未知";
+        if (b < 1024) return b + " B";
+        if (b < 1024 * 1024) return (b / 1024) + " KB";
+        return String.format(java.util.Locale.US, "%.1f MB", b / 1048576.0);
+    }
+
     /** 系统弹窗有了结果：要么把 AUDIO_CAPTURE 交回页面，要么 deny。两次结果打进同一个闩里，只认第一次。 */
     private void finishMic(boolean allowed, long expected) {
         PermissionRequest req = micPending;
@@ -596,6 +1208,12 @@ public class MainActivity extends Activity {
      * ③′ 没有盖着的层、但浏览器历史还能退 ⇒ 在 WebView 里退一层（0.4 那层留着，挪到"盖着的层"后面）；
      * ④ 三层都退不动 ⇒ 飘那枚"再按一次返回，退出工作台"，1.8 秒内再按一下才真退。
      *
+     * 0.10 在最前面加了 ⓪：页面元素全屏（HTML5 requestFullscreen）压在所有层上面，这时候返回键的
+     * 唯一正确语义就是"退出全屏"。为什么它必须在 ② 之前：不然在全屏视频里按一次返回会被算成
+     * "第二下退出"，直接把人从 App 里踢出去，而他要的只是退出那个全屏。
+     * 也必须在 ③ 之前：③ 是异步问页面的，全屏时页面那颗"退出全屏"按钮虽然在 DOM 里但 Chromium 那份
+     * 全屏状态是我们壳握着的 —— 只交 cb.onCustomViewHidden() 才是正解，点按钮不算。
+     *
      * 为什么同时挂 onKeyDown 和 onBackPressed：这台机 targetSdk=35，侧滑手势到底走不走 KEYCODE_BACK
      * 我没有读数（0.3 那条注释里写的是推断）。两个口都接到同一个 handleBack()，哪一条真被调用
      * 由日志说话；handleBack() 返回 true 表示这一发我们已经处理掉了，不会再往下传，所以不会弹两次。
@@ -606,6 +1224,11 @@ public class MainActivity extends Activity {
     }
 
     private boolean handleBack() {
+        if (fullscreenView != null) {                                    // ⓪ 0.10：页面元素全屏里 ⇒ 这一发只退全屏
+            exitFullscreen("在页面元素全屏里按了返回");
+            L("back", "⓪ 全屏层 ⇒ 已退出全屏，这一次返回到此为止（不问页面、不飘退出提示）");
+            return true;
+        }
         if (panel) { openEntry(); return true; }                       // ① 停在说明屏：返回=回工作台
         if (hintShowing()) {                                           // ② 提示还飘着 ⇒ 这一发就是"再按一次"
             L("back", "提示还飘着又按了一次返回 ⇒ 按他说的退出，不等它自己消散");
@@ -924,6 +1547,16 @@ public class MainActivity extends Activity {
     private void fromPanel(String what, String value) {
         if ("retry".equals(what)) { openEntry(); return; }
         if ("diag".equals(what)) { showPanel(panelKind, panelDetail); return; }
+        // 0.10：页面里那只监听（DL_NAME_JS）在这一发点击时把 <a download="…"> 的名字递回来存一下。
+        // 只有名字，没有内容；值不进日志，只记长度。
+        if ("dlname".equals(what)) {
+            pendingDlName = value;
+            pendingDlAt = System.currentTimeMillis();
+            L("dlname", "收到页面起的名字（"
+                    + (value == null ? "(null)" : value.length() + " 字符")
+                    + "）⇒ 存 6 秒，只在这期间真的来了下载时才当文件名用");
+            return;
+        }
         if ("clear".equals(what)) {
             CookieManager cm = CookieManager.getInstance();
             cm.removeAllCookies(null);
