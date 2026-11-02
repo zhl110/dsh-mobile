@@ -208,6 +208,8 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
 | **对账手机侧那个 dsh 自己写了什么**（状态 35 那一轮的五发，纯只读） | `scripts/dsh-agent-write-audit-probe71.sh` → `downloads/p71.txt`（cordis 现状/两份备份/`--dump-config`/手工调 runner/我的三层 md5。⚠ 它 ② ⑥ 两节路径写错 ⇒ 空读数，**空读数不能读成结论**）；`scripts/dsh-confine-recheck-probe72.sh` → `p72.txt`（**修正版**：模块真实路径、`confine()` 直调、围内/围外 `/proc/1/root` 对照、dpkg、hosts 对账、会话清单）；`73`/`74`/`75` → 同一份会话记录三次提取（73 抓错字段、74 抓到工具名但命令为空、**75 才把 44 条命令串全提出来**） |
 | 在机上读一份会话记录（`session.v4.jsonl.zstd`） | 见 `scripts/dsh-session-calls-probe75.sh` 第 ① 节那段的形状：`zlib.zstdDecompressSync` 解帧 → 按行 JSON → 取 `type==="tool/call"` → **`JSON.parse(data.arguments)` 才是命令**（`data.arguments` 本身是字符串）。FRAMES/LINES/DECOMP_FAILS 三个数要互相对得上 |
 | 重打 APK | `bash app/build.sh`（版本号在 `AndroidManifest.xml` 与 `build.sh` 两处） |
+| **打 rootfs 产物**（GB 级，不入库，挂 Release） | 先 `bash tools/make-payload.sh --dry` 看普查（只读），再 `bash tools/make-payload.sh`。剥除清单的**单一真源是 `scripts/dsh-payload-pack.sh`** 的 `DROP`/`DSH_KEEP`；PC 侧那两支只做压缩、两道闸门、指纹。产物与 `payload-meta.txt` 落 `release-assets/`（已 gitignore） |
+| **在别人机上装成即装即用** | `bash tools/install-from-scratch.sh`（取包→撞 sha→设备上以 root 解压→推四件→起入口→烤口令→装 APK）。现役那台机别跑，见脚本头部警告。给别人看的说明在 `docs/INSTALL-from-scratch.md` |
 | 重跑入口自测（**不需要手机**，Windows 侧就能跑） | `node scripts/dsh-entry.js --selftest`（2026-10-21 当场：`合计 58 条：PASS 58 / FAIL 0`；铁律 12） |
 | 换图标（切五档） | 先把满幅方图存成 `app/icon/icon-src.png`，再 `sh app/icon.sh`，最后重打 APK |
 | 电脑侧取模型 / 推模型 | `bash tools/fetch-sensevoice.sh` / `bash tools/push-sensevoice.sh` |
@@ -367,6 +369,15 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
   我只扫了 dist ⇒ 读出"`createObjectURL` 0 命中、`requestFullscreen` 0 命中"，并据此把下载与全屏判成"将来才用得上"——**错的**：pdf 预览在 `a.download = filename`、文档预览里有 `<video>`。
   ⇒ 这类"有没有真实用户"的判断，扫描面要先数清楚（`find … -path '*client-ui*' -name '*.js'`），或干脆看**壳的运行时日志有没有进过那一发**。
 - **`grep -F` 和 `.{0,60}` 不能同时用**（p83 那发）：加了 `-F`，`.` 与 `{0,60}` 全成字面量 ⇒ 五个文件的"原文窗口"齐刷刷空，看着像"页面里没有这段代码"。空窗口先怀疑自己的正则，别下结论。
+- **往 chroot 里塞"一条命令"有两种静默失败，11-02 这一轮各撞一次**（都是白花一轮 adb 的那种）：
+  ① **PATH**：`chroot $ROOT /bin/sh -c "tar …"` 继承的是 **Android 那套 PATH**，里面没有 `/usr/bin` ⇒ 报 `tar: not found`、`head: not found`，
+  看着像"chroot 里没装 GNU tar"。必须 `/usr/bin/env PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`（`scripts/dsh-chroot.sh:161` 一直是这么写的）。
+  ② **引号层数**：Windows bash → `adb shell "…"` → `su -c "…"` → `chroot … bash -c "…"`，双引号会与外层撞、单引号会被 `su -c '…'` 截断。
+  上一版把 `grep -rlIE -e "apiKey|api_key|sk-[A-Za-z0-9]{12,}"` 塞进这种串，`{12,}` 被设备 shell **展开成好几个词**、`|` 被当管道，
+  于是一发普查打出 770 行 `/dev` 报错加 `/system/bin/sh: access_token: inaccessible or not found` —— 那种输出**一条都不能信**，
+  最坏的是它"看着像跑完了"。⇒ **凡清单里有中文/空格路径、或模式里有 `|` 与 `{}`，就写成设备侧脚本文件走 `--run 'bash /root/x.sh'`**
+  （数组拼 `--exclude`、`find -print0`，引号只有一层）；`tools/run-probe.sh:45` 那对 `S()`/`CHRUN()` 的引号形状是可用的，
+  但它在 PC 侧字符串里仍然不允许出现双引号 —— `scripts/dsh-payload-pack.sh` 的头注释记的就是这条演进。
 - **探针输出文件名要先查同名再写**（14.35 的事故）：我把新探针的读数写进 `downloads/p75.txt`，**覆盖了 14.33 引用过的那份**（差 1 字节，已按原脚本重跑生成，见 14.35 六）。
   `tools/run-probe.sh` 不挡覆盖 ⇒ 落盘前 `ls downloads/p<NN>*.txt`。
 - **`navigator.clipboard.writeText` 在这台机的 WebView 里是通的，`readText` 不通**（14.35 各实测一次）：写 → 原生 `input keyevent 279`（KEYCODE_PASTE）粘得回来，同一个串；读 → **`NotAllowedError`**。

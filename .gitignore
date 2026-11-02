@@ -1,6 +1,10 @@
 downloads/
 app/local/
 app/out/
+# GB 级的 rootfs 产物不入库（git 存不了属主与 setuid，且单文件超 100 MB 直接被拒）：
+# 它挂 GitHub Release，仓里只留 tools/make-payload.sh + scripts/dsh-payload-pack.sh 这两支再造它的脚本。
+# 见 docs/INSTALL-from-scratch.md。2026-11-02 加。
+release-assets/
 reference/gh-3p/
 # 这三条同一理由：都是从 GitHub 拉下来的上游/别人项目，各自带自己的 .git，
 # 被 add 进去会变成"嵌入式仓库"（gitlink）—— 工作区仓里留下一个没有 .gitmodules 的坏引用，
