@@ -1796,7 +1796,12 @@ $ bash scripts/dsh-payload-pack.sh --selftest
 
 **七、提交与推送**
 
-（本发提交号见下面第八节之后由 `git log` 复点填死，别凭记忆抄。）
+- 子仓 `dsh-mobile`：内容那一发 **`3cc7dbf`**（闸门重估 + 自测 + 本轮两份文档）。HTTPS 推仍会撞 `CRYPT_E_NO_REVOCATION_CHECK` ⇒ 照老路一发一次性 SSH URL：
+  `git push git@github.com:zhl110/dsh-mobile.git main` → `5405f6a..3cc7dbf  main -> main`，`git ls-remote` 复点远端 = `3cc7dbf56ee5ff984040e993ba4963a08d21768e`，
+  `rev-list --count` HEAD 与 `origin/main` 都是 **18**。
+- 父仓 `D:\mycode`：同内容照旧再提一发（pathspec 带 `dsh-mobile/` 前缀，那仓没配 remote ⇒ **本地未推**）。
+- **本节是"回填提交号"那一发**，所以它自己的号不在上面（写进去就自指）；当场复点用
+  `git -C /d/mycode/dsh-mobile log --oneline -2` 与 `git -C /d/mycode log --oneline -1`，回填那发一定比 `3cc7dbf` 新。
 
 **八、我这轮没做什么**
 
