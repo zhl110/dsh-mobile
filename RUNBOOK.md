@@ -105,6 +105,14 @@ curl `(28)` 超时、node TLS 8 秒窗没下文、**0 字节**，对照组 `obje
 另一件我做不了也不该替你做的：**重启手机验证开机自启**。脚本在位但现在是关着的（上面那行），
 「真重启一次服务自己起来」这条我没验（第 6 节）。
 
+**→ 2026-11-02 这一轮这张表多一件"交付物"，但它还没生出来（全文 14.37）**：他要的是**别人 clone 完能即装即用**，
+判据先立住 —— **大件不能提交进 git，不是因为配额，是因为格式装不下**：整树 **4,554,034,779 B**、root:root **119,474** 与 1001:1001 **6,194** 个条目、
+setuid/setgid **17** 个（`passwd`/`su`/`mount` 那一族），而 git 树对象**没有 uid/gid 字段、也没有那两位**（读数 `downloads/p89.txt`）。
+所以形状改成 **tar.gz 产物 + 一键装**：`scripts/dsh-payload-pack.sh`（设备侧，剥除清单的单一真源）+ `tools/make-payload.sh`（PC 侧压缩 + 两道泄露闸门 + `SHA256SUMS`/`payload-meta.txt`）
++ `tools/install-from-scratch.sh`（撞 sha → **设备上以 root 解压**才保得住属主与 setuid → 建挂载点 → `deploy-entry` → 起入口造口令 → 拉口令烤 APK → `install-apk`）
++ `docs/INSTALL-from-scratch.md`。**包没打成、Release 没建**（`gh api …/releases` 读数：**空**）—— 手机在这轮中途掉回 `offline` 再没回来，
+而 rootfs 只存在于这台机上。⇒ 现在**只能他自己做的那一件**很具体：**重插 USB / 在弹窗里勾"一律允许"**，回来就跑 `bash tools/make-payload.sh --dry` 再 `bash tools/make-payload.sh`。
+
 ## 归档：§1 与 14.1–14.23 的全部内容搬到了 `RUNBOOK-archived.md`（原文一字未改）
 
 **为什么搬**：他一句"这些文件太长了，读起来会不会比较费劲？你要不要先给它整理一下？不然读写的时候会消耗你太多上下文和 token"（2026-10-21 晚 19:5x）。
@@ -1618,3 +1626,85 @@ Android 的 WebView **没有"复制"这个壳侧回调**（复制是 Chromium �
 
 这条把**最后两格也按挂起处理**：黑屏十几秒、报错后不自动重试 —— **我不主动改代码，也不再回头问"要不要改"**（与 14.33 之后 purge 那档同一走法）。要动的时候判据现成，就是本节三那两条：入口对主帧导航回带 `Refresh: 2` 的最小 HTML（`tools/deploy-entry.sh` 推上去就生效，不用重装 APK）；黑屏那段时间入口回的正是要等的 503，两条同源。
 **留在他手上的现场只有一个**：工作台输入框里那发待发附件 `dsh-upload-test.txt`（92 B）＋ `/sdcard/Download/dsh-upload-test.{txt,png}` 两件测试文件 —— 他哪天按下发送我就补最后一格读数，不说撤我就先留着（**不替他清，也不替他点**）。
+
+---
+
+### 14.37 他一句"把引擎、Ubuntu rootfs、Node、dsh 本体全部提交到仓库里，让他们即装即用"＋"你不用问我，直接做完，打包结束再跟我说"：判据是**格式装不下**而不是配额；两支产物化脚本与一键安装写完了，**包没打成 —— 手机在这一轮中途掉回 offline**（2026-11-02，北京 22:0x–23:5x，手机前半程在场）
+
+**一、他先问的是"别人下载我这个项目能不能直接用"，答完他直接下了这一句**
+
+答话那一发是真读数：壳 0.10 那发 APK 在 `app/out/`（`.gitignore` 第 3 行）里、仓里一个二进制都没有，
+运行时那三件（rootfs / node / dsh）也不在 ⇒ 别人 clone 完还是起不来。**没验的也写清了**：干净 rootfs 上从零装一遍没跑过、真重启没验过。
+
+**二、"提交进 git"这条为什么不通（依据是 `downloads/p89.txt`，不是猜）**
+
+| 读数 | 值 | 对 git 意味着什么 |
+|---|---|---|
+| rootfs 整树 | 4,554,034,779 B | GB 级产物（p89 一） |
+| 一级大头 | /usr 2,450,122,990、/root 745,829,183、/var 716,620,003、/tmp 640,056,277 B | 其中 /tmp 与缓存是可剥的 |
+| 属主分布 | root:root 119,474、1001:1001 6,194、root:shadow 6 | **git 树对象没有 uid/gid 字段** |
+| setuid/setgid | 17 个（`passwd`/`su`/`mount`/`chfn` 那一族） | git 只保可执行位 ⇒ **这两位必丢** |
+| 设备节点（/dev 之外） | 4 个 | git 存不了 |
+| 符号链接 | 1,588 个 | git 能存（这条不是障碍） |
+| /usr 一发实测 | tar+gzip -6 = 802,531,136 B，耗时 99 秒，**比 3.05** | 整包估算落在 1 GB 上下 ⇒ 单发 Release 附件装得下 |
+
+我第一版把"设备节点存不了"当决定性证据，**这条被 88/89 推翻**：`/dev` 是运行时 tmpfs，本来就不在树里（所以只数到 /dev 之外那 4 个）。
+真站得住的两条是**属主**与 **setuid/setgid**。写下来是因为这两个数一个是格式限制、一个是"我当时的判据得降级"。
+
+**三、`/phone` 那一发假读数（探针 88，`downloads/p88.txt`）**
+
+`du`/`find` 的 `-x` 跳不掉 **同一块文件系统上的 bind mount** —— `/phone` 就是 `/data/media/0`，跟 rootfs 同在 `dm-74` 的 f2fs 上。
+于是 88 那发把整个手机存储算进 rootfs，读出 **375 GB** 级、"最大文件"是他 `/phone/Pictures/Screenshots/*.mp4`，属主与条目计数全部虚高。
+89 改成按路径显式剔 `/phone /proc /sys /dev` 才是上面那张表。**同族第二种形状**：不是"数多了"，是"数错了对象"。
+
+**四、交付形状：tar.gz 产物 + 两支脚本 + 一键安装（大件不进仓）**
+
+| 落点 | 干什么 |
+|---|---|
+| `scripts/dsh-payload-pack.sh`（设备侧） | **剥除清单的单一真源**：`DROP`（/phone、/tmp、缓存、.npm、apt、frida、/root 那几件）＋ `DSH_KEEP`（`/root/.dsh` 只留 `speech-to-text`/`profiles`/`dsh-purge`，其余整层当运行态剥）。tar 的 `--exclude`、du 的 `--exclude`、find 的 `-prune` 由**同一批数组**生成 |
+| `tools/make-payload.sh`（PC 侧） | 收流 → 本机 `gzip -1` → 两道闸门 → `SHA256SUMS` + `payload-meta.txt` → 超 1900 MB 自动切卷。模式 `--dry`（只普查）/ 默认（打包） |
+| `tools/install-from-scratch.sh`（PC 侧） | 取包**撞 sha256** → **设备上以 root 解压**（只有这样才能保住属主与 setuid）→ 建挂载点目录 → `tools/deploy-entry.sh` → 新机才 `tools/deploy-env.sh` → `--entry` 造口令 → `dsh-entry-check.sh` 体检 → `--pull-key` 烤进 APK → `tools/install-apk.sh`。`--verify` 只体检、不写字节 |
+| `docs/INSTALL-from-scratch.md` | 给别人那一页，含"包里有什么 / **明确没有什么**" |
+
+两条硬规矩落在代码里而不是落在我的记性上：**闸门一**出包前在机上对保留集扫凭证形状（只报文件名与命中的那个词，绝不打印值 —— 铁律 8），有命中就停；
+**闸门二**出包后对**成员名单**再扫一次敏感名（`entry.key`/`session.v4`/`.dsh-env`/`bash_history`/`/phone/`/`.npm/`/`apt/archives`/`attachments`/`storages`/`logs`/`frida`…），命中就删包不推。
+**同源对账**：条目数从**同一条流**数两次（raw 与 gz 必须相等），不拿另一套 find 口径去凑。
+
+**五、这一轮我自己撞的两次"静默失败"（都是白花一轮 adb，已进 AGENTS.md 已知坑）**
+
+1. **PATH**：`chroot $ROOT /bin/sh -c "tar …"` 继承的是 **Android 那套 PATH**，里面没有 `/usr/bin` ⇒ `tar: not found`、`head: not found`，
+   看着像"chroot 里没装 GNU tar"（其实 `tar (GNU tar) 1.35` 一直在）。修法是照 `scripts/dsh-chroot.sh:161` 那条 `/usr/bin/env PATH=…`。
+2. **三层引号**：Windows bash → `adb shell "…"` → `su -c "…"` → `chroot … bash -c "…"`。把 `grep -rlIE -e "apiKey|api_key|sk-[A-Za-z0-9]{12,}"` 塞进这种串，
+   `{12,}` 被设备 shell **展成好几个词**、`|` 被当管道 ⇒ 一发普查打出 **770 行** `/dev` 报错加 `/system/bin/sh: access_token: inaccessible or not found`，
+   而它**退码 0、看着像跑完了**。那一发的 `== 2 保留集 2,763,876,302 B` 是同一批 `--exclude` 出来的（可信），`== 4/== 5` 两节整节作废。
+   ⇒ 结论：**清单里有中文/空格路径、或模式里有 `|` 与 `{}`，就写成设备侧脚本文件**走 `--run 'bash /root/x.sh'`；当场读到 `/root/.dsh/dpkg-mid-杂项.txt` 这种名字，
+   更确信字符串拼 `--exclude` 迟早劈开 —— 数组不会。
+3. 还有一处旧坑复发：`STATE`/`SEC` 用"双引号里反斜杠换行"续行，**换行符留在了值里** ⇒ 普查里冒出 `[状态 ] \` 这种条目。清单搬到设备侧数组之后自然没了。
+
+**六、没打成包的那一半：手机在这一轮中途掉回 offline**
+
+`adb devices` 从 `f22aa1e1 device` 变成 `f22aa1e1 offline`，此后一直 offline。试过并复点过的：
+`adb reconnect`、`adb reconnect offline`、`adb kill-server` + `start-server`（两次）、
+两个 adb 二进制（`/d/mycode/.agent-tools/…` 与 `DeskBox/…/platform-tools/`）**读数一致**，`adb shell` 直接回 `device offline`；
+Windows 侧枚举正常：`ADB Interface` `Status=OK`，`InstanceId=USB\VID_22D9&PID_2765&MI_01\7&188A6EB7&1&0001`（ Composite 在 `VID_22D9&PID_2765\F22AA1E1`）
+⇒ **不是 PC 侧驱动或 adb 的事**，是手机侧那条调试会话掉了（这台机的老形状：重插 USB / 在弹窗里勾"一律允许" / 撤销调试授权重授）。
+**payload 只存在于这台机上**，所以打包这一格在他之前谁也代替不了。设备掉线前跑完的只有普查（上面那三个数）。
+
+**七、提交与推送（号当场 `git log` 复点过）**
+
+- 子仓 `dsh-mobile`：**`b5ff594`**（两支脚本 + 一键安装 + 装法文档 + 探针 88/89 + `.gitignore` 的 `release-assets/` + AGENTS 那条新坑）。
+  `git push origin main` 走 HTTPS 仍然 `schannel: … CRYPT_E_NO_REVOCATION_CHECK` ⇒ 按老路**一发一次性 SSH URL**推上去：`b0261c5..b5ff594 main -> main`，
+  `git ls-remote` 复点远端 = `b5ff5946dc0d5fb46320e726dadacaee2cb2c916`，`rev-list --count` HEAD 与 origin/main 都是 **16**。
+- 父仓 `D:\mycode`：**`4f083967`**（pathspec 带 `dsh-mobile/` 前缀；`diff --cached --name-only` **8 行、范围外 0 行**）—— **本地未推**（那个仓从来没配过 remote）。
+- 一处我自己的事故要写下来：中途我**用 Write 覆盖了仓里已有的 `.gitattributes`**（它 10-20 就建好了，比我要写的那份更全）。
+  已 `git restore --source=HEAD --staged --worktree .gitattributes` 还原，复点：`git diff HEAD -- .gitattributes` **空**、
+  blob sha `94211d6d…` 与 HEAD 那份**去掉 CR 之后逐字节相同**（盘上那份带 25 个 CR，是 autocrlf 的既有状态，本轮没动）。
+
+**八、我这轮没做什么**
+
+包**没打成** ⇒ `release-assets/` 还是空的（目录都没建），GitHub Release **一个都没创建**（`gh api …/releases` 读数：**空**），
+所以"即装即用"这一格现在是**脚本齐、判据齐、只差取数那一发**；`tools/install-from-scratch.sh` **一行都没实机跑过**
+（这台是现役机，脚本第 3 步"rootfs 非空就停"本来就该拦住它 —— 真验证要第二台机或干净 rootfs）；
+`/root/.dsh` 那层的凭证普查**只跑了一半**（== 5 那节整节作废），所以 DROP 清单是按"运行态一律剥"定的、**不是按普查逐条定死的**；
+他的东西一个没碰（`/data/local/tmp` 那批、cordis、锁屏、自启、purge）；没 reboot、没装包、没重启引擎；
+上游那 1 GB 多的 `/usr` 没做内容扫描（慢且 key 只会以字段名出现，这条在普查脚本里明写了"没扫"）。
