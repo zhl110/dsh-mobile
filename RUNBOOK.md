@@ -1973,3 +1973,51 @@ HTTPS 推仍会撞 `CRYPT_E_NO_REVOCATION_CHECK` ⇒ 照旧走**一次性 SSH UR
 也就是**发布那一刻的 HEAD**，而**产出这一发产物的是工作区里那几个尚未提交的脚本修正**（`tar_to_file()` / `CHRUN $*` / `DROP frida*`，都在 `8ab847c`）。
 ⇒ 想按 tag 复现产物会拿到旧脚本；**复现要用 `8ab847c` 的那两支**，tag 只当"这一发挂在哪次提交上"的坐标用。这是"名字与它指向的东西不是一回事"那一族的又一个形状。
 **回填这一发（本节 + PROGRESS 那两行）自己的号不写** —— 写了就自指。
+
+### 14.41 他一句"把仓库改成公开"：公开前把**全历史**扫了一遍（没有真凭证会跟着露出去），权限墙被他一句"给我的令牌加权限"推开，翻完之后用**匿名 Range** 复点"外人真下得动"（2026-11-03，北京 21:4x–21:5x，手机在场、他人也在电脑前）
+
+**一、先做体检再翻开关**（公开是不可逆的：历史里的 blob 就算后来删了也还在）
+
+| 查什么 | 读数 |
+|---|---|
+| 体积条件 | 跟踪文件 **187** 个、`.git` **18 MB**、最大单文件 **3,961,128 B**（`app/icon/icon-src.png`）⇒ 都在 GitHub 公开库的单对象 100 MB / 仓 10 GB 之内；901 MB 那发在 **Release 资产**上，不在 git 树里 |
+| 提交数 | `git rev-list --count --all` = **23**、`git log --all -p` 全量 **2,677,176 B**（扫的就是这一整坨，不是只看 HEAD） |
+| 凭证形状 | `sk-[A-Za-z0-9]{20,}` 全历史命中 **1 行** ⇒ 追进去是 `scripts/dsh-payload-pack.sh` 里闸门自测埋的假串 `FAKEKEY="sk-SELF…"`；`apiKey|api_key|access_token|secret|password` 带 16 位以上值的命中 **1 行** ⇒ 在 `RUNBOOK-archived.md:134`，原文是 **`sk-dummy-invalid-do-not-use`**（故意无效的哑 key，那发是为了证明请求真离开过手机） |
+| 配置模板 | `config/dsh-env` 只有 **3** 个 export（`DSH_PERMISSION_MODE` / `DSH_UNSHARE_RUN_ALLOW_NO_PIDNS` / `DSHM_NPM_MIRROR`），值长 15 / 1 / 30，**没有 API key**；`reference/dsh-web-default-config.txt` 里"键名字段带 ≥12 位值"命中 **0** |
+| 个人标识 | 手机序列号 `f22aa1e1` 命中 **6 行**（文档里的复点读数）；提交作者邮箱 `1828980455@qq.com` 命中 **28 行**（每发的 Author/Committer 头）⇒ 去查先例：他另外两个**公开**库 `speakmore-windows`、`memory-workstation` 的最新提交用的就是同一个邮箱 ⇒ **这次不多露一次**（另两库用的是 `75671644+zhl110@users.noreply.github.com` 与 `zhl110@users.noreply.github.com`） |
+
+⇒ 结论：**没有真凭证会被公开**。会露出去的是设备信息（序列号、机型、KernelSU/susfs 这套 root 方案、"引擎直跑不弹窗"这个形态）与那 901 MB 包本身；服务只绑 `127.0.0.1`，不做端口转发就摸不到 —— **这是读数，不是保证**。这两条我按事实摆给他，没有替他改主意。
+
+**二、权限墙：`gh repo edit --visibility public` 回 HTTP 403**
+
+`Resource not accessible by personal access token`，重试一次还是 403，复点 `visibility` 仍是 `PRIVATE`。
+⇒ 摊开两条路让他一次决定（**A 他自己在库设置点两下、B 给令牌加 Administration**），他选 **B**：以后这类事我自己能办。
+具体后果写清了他才签：Administration 管的不只是可见性，还包括**删库、改默认分支、改分支保护**。
+
+**三、驱动他的 Edge 这一段：两次坐标被抢，我就停手了**
+
+Qoder 内置浏览器（`browser-use`）没有他的 GitHub 登录态 —— 打开设置页直接跳 `https://github.com/login?return_to=…`，所以那条路**不能替他点**。
+改用他的 Edge（已登录）：`msedge.exe "<URL>"` 在现有实例里开新标签（进程数 18 → 20 复点到），坐标点击走 `user32!SetCursorPos + mouse_event`（脚本 `downloads/click.ps1`，截图 `downloads/shot.ps1`）。
+**第一发点标签页成了**（`CURSOR_AFTER 600,30` 与请求值一致），**接着两发被抢**：请求 `617,437` 回 `461,282`、请求 `600,30` 回 `636,35` ⇒ **他手在鼠标上**。
+⇒ 在**令牌设置页**上盲点是危险的（勾错一项就改错了权限），所以我停手，改成"每一步说给他点"。他随后自己走完了：`Edit` → `Administration` → `Access: Read and write` → `Save`。
+顺带纠正他一次走偏：他先打开的是 **Tokens (classic)** 那把（页顶红字 `This token expired on Fri, Aug 14 2026`），**不是 gh 在用的那把** —— gh 用的是 fine-grained 的 `ZHL110`（无过期日）。
+
+**四、翻公开 + 匿名复点（判据只认落下来的字节）**
+
+加完权限当场复点：`gh api repos/zhl110/dsh-mobile -q .permissions` 回 **`admin=true push=true maintain=true`** ⇒ `gh repo edit --visibility public --accept-visibility-change-consequences` **退出码 0**，`gh repo view` 复点 **`PUBLIC isPrivate=false`**。
+**外人能不能下，不看这两个数**，看匿名请求（`curl` 不带任何令牌、`--ssl-no-revoke`、跟 302）：
+
+```
+repo 页  https://github.com/zhl110/dsh-mobile                     => HTTP 200
+tag 页   …/releases/tag/payload-20261103-132346Z                  => HTTP 200
+资产     …/download/…/dsh-rootfs-20261103-132346Z.tar.gz  Range 0-1023
+         => HTTP 206  收到 1024 B  头四字节 1f 8b 08 00（gzip 魔数）
+         末址 release-assets.githubusercontent.com/github-production-release-asset/1428298903/…（签名 URL，exp 14:49:57Z）
+meta     …/download/…/payload-meta.txt                            => HTTP 200  1,611 B  sha256 前缀 fbcf1da545ceeaa1（与本机那份撞上）
+```
+
+⇒ **匿名 Range 拿到 206 + 1024 B + gzip 魔数**才是"公开可用"的结案判据（铁律 3：端口在听/200/退出码 0 都不算）。两份测试件（`downloads/anon-head.bin`、`anon-meta.txt`）当场删，`ls` 复点不在。
+**编辑权限不换令牌值**（只有 Regenerate 才换）⇒ gh 与 GCM 里存的还是同一把，不用重登、没动任何配置。
+
+**五、这一轮的"没做什么"**：没删库、没改默认分支、没开分支保护、没动那把令牌的**其它**权限项、没重新生成令牌值、没碰 `agent-hub` 那条 SSH 与另两把凭据；**没验"从 GitHub 拉回来能不能解那个包"**（只验了匿名能取到头部 1024 B 与 meta 全文 —— 完整下载 901 MB 没跑）；`install-from-scratch.sh` 仍没在干净机上跑过；他的东西一个没碰、没 reboot、没装包、没重启引擎。
+**一条要留的后续**：公开之后 git 历史**永久可回看**（归档 RUNBOOK 里那些设备细节都在里面）；真要收回只能删库重建，改历史不算收回去。

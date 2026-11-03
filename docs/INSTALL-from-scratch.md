@@ -53,6 +53,9 @@ bash tools/install-from-scratch.sh --verify        # 只复点现场，一个字
 而**这个库目前是 PRIVATE** ⇒ 没被加进协作者的人 `gh release download` 取不到资产。给别人装的先决条件是**把他 invite 进来**或**把库转公开**（那是作者的决定，我没动）。
 拿不到 Release 的人有第二条路：把那三件 `tar.gz` + `SHA256SUMS` + `payload-meta.txt` 直接交给对方，
 `bash tools/install-from-scratch.sh <本地路径>` 走本地包 —— 撞 sha256 那条判据与流程完全一样，只是少了一次下载。
+**→ 2026-11-03 改口（旧话不删）**：库已 **PUBLIC**（作者一句"把仓库改成公开"），上面那句"PRIVATE ⇒ 取不到"作废。
+现在任何人**不用登录**就能下：`gh release download payload-20261103-132346Z -R zhl110/dsh-mobile`，或者直接用资产 URL
+`https://github.com/zhl110/dsh-mobile/releases/download/<tag>/<文件名>`（匿名复点过：Range `0-1023` 回 **206 / 1024 B / 头四字节 `1f 8b`**，`payload-meta.txt` 全量 sha256 与本机那份撞上）。
 
 **这一页的验证状态要如实说**：整条流程（含 3b）**至今没在一台干净机上跑完过一次** —— 作者手上只有那台现役机，
 而它第 3 步"目录非空就停"本来就该拦住，不能拿它自测。脚本逐支 `bash -n` 过、两道泄露闸门有本机自测

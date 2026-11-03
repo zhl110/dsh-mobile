@@ -228,7 +228,7 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
 | 装 APK 但**不重打** | `bash tools/install-apk.sh`（只推现成那发；`--verify` 只比指纹、一个字节不写。**别用 `app/build.sh --install`**：它前六步无条件重打，sha 必变 ⇒ 报过的指纹作废） |
 | 收尾量流量 / 我留了什么 / 引擎现场 | `bash tools/run-probe.sh scripts/dsh-traffic-and-cleanup-probe39.sh downloads/p40.txt`（`/proc/net/dev` 两拍差值、`lo` 上的连接数、两个 node 的出生与年龄、机上 `.sh` 残留分类） |
 | **开工复点时顺手取一次 `/proc/net/dev` 全表** | 10-21 傍晚这轮就没取，"整轮走了多少网"当场答不出增量，只能退回"我点得出的字节"（14.27 八）。基线只有开工那一刻有。→ **同日再补**：别存进 PC 的 `/tmp`（那是**另一个** `/tmp`，探针在手机上查不到，见铁律 1），**直接 `> downloads/net-full-<北京时间>.txt`**，下一发的差集在 PC 上拿这两份文本算（`名字 rx tx` 三列；口径见铁律 2 的 `lo` 那条）。第一份在 `downloads/net-full-20261021-185612.txt` |
-| 推到 GitHub 私密库 | 先 `git rev-parse --show-toplevel` 确认人在 `D:/mycode/dsh-mobile`，再 `git add -- .` / `git commit -m … -- .` / `git push origin main`（`origin` = `zhl110/dsh-mobile`，**私密**）。推完复点：`git rev-list --count HEAD` 与 `git rev-list --count origin/main` 要相等，`gh repo view --json visibility` 要回 `PRIVATE` |
+| 推到 GitHub 私密库 | 先 `git rev-parse --show-toplevel` 确认人在 `D:/mycode/dsh-mobile`，再 `git add -- .` / `git commit -m … -- .` / `git push origin main`（`origin` = `zhl110/dsh-mobile`，**私密**）。推完复点：`git rev-list --count HEAD` 与 `git rev-list --count origin/main` 要相等，`gh repo view --json visibility` 要回 `PRIVATE` **→ 11-03 状态 42 两处改口（旧话不删）**：① 库已 **PUBLIC**（他一句"把仓库改成公开"），复点要回的是 `PUBLIC`；② `git push origin main` 这条**在这台机上走不通**（HTTPS 撞 `CRYPT_E_NO_REVOCATION_CHECK`），实际用的是**一次性 SSH URL** `git push git@github.com:zhl110/dsh-mobile.git main`（不动 `remote.origin.url`），更新计数用 `git fetch <同一 URL> main:refs/remotes/origin/main` |
 
 ## 已知坑（都是一次性真相，别再花一轮去重新发现）
 
@@ -387,6 +387,9 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
   （64 KiB 全 `\n` 逐字节撞上 ⇒ 我据此误判"能过"；换成 120 MB 真流，PC 侧**多 614,713 B 且 md5 不对**）。
   ⇒ 凡是 GB 级产物：**在设备上写成文件**（`tar -czf`）**再 `adb pull`**，并且**机上自报的字节数/sha256/条目数**要与 PC 拉回后重算的那三份逐字节撞上（`make-payload.sh` 第 3 步就是这么写的）；
   撞不上就停，别把"退出码 0 + 字节数对"当链路可信。**附带一条**：`du -sbx /` 里的 `-x` **拦不住 bind 进来的 `/phone`**（与 rootfs 同一个 `st_dev`）⇒ "整树"能读出 375 GB 那种假数，口径要写 `--exclude=/phone`。
+- **改库可见性要 Administration 那项权限，而"外人下得动下不动"只认匿名 Range**（11-03 状态 42，读数 RUNBOOK 14.41 二/四）：那把 fine-grained PAT 原本只有 Contents + 建库 ⇒ `gh repo edit --visibility public` 回 **HTTP 403**（重试还是 403）。**摊开"缺哪一项 + 那一项还附带什么能力"让他一次决定**，他选的是加权限（Administration 同时管删库、改默认分支、改分支保护）。**编辑权限不换令牌值**（只有 Regenerate 才换）⇒ gh 与 GCM 不用重登，也别去动任何配置。翻完之后判"公开可用"用的是 `curl --ssl-no-revoke -L -r 0-1023` 打 Release 资产 ⇒ 要 **206 + 真收到 1024 B + 头四字节 `1f 8b`**；repo 页 200 与 `gh` 退出码 0 都不算（铁律 3）。
+- **要把仓公开之前，扫全历史而不是只看 HEAD**（同轮）：`git log --all -p` 整坨扫凭证形状，顺手数最大跟踪文件与 `.git` 体积（公开后历史里的 blob 删不掉，改历史不算收回去）。**每一发命中都要追进原文再判** —— 那两发 `sk-…` 一发是我自己闸门自测埋的假串、一发是归档 RUNBOOK 里那行 `sk-dummy-invalid-do-not-use`（故意无效的哑 key）。**个人标识先查先例**：那个提交邮箱在他另外两个**公开**库里早就是公开的 ⇒ 不多露一次；设备序列号/机型/root 方案这类**会露但不可逆**的，按事实摆一次，他不改口就执行。
+- **内置浏览器没有他的登录态；驱动他的 Edge 只能坐标点，他手在动就立刻停手**（同轮）：`browser-use` 打开 GitHub 设置页直接跳 `/login` ⇒ 替不了他点。可用形状：`msedge.exe "<URL>"` 在现有实例里开新标签（进程数复点 18→20）+ `user32!SetCursorPos`/`mouse_event`（`downloads/click.ps1`）+ `CopyFromScreen` 截图回看（`downloads/shot.ps1`）。**每发点击后把 `GetCursorPos` 与请求值比**：一致才继续（`617,437→461,282`、`600,30→636,35` 那两发就是他在动鼠标）⇒ 在**令牌与权限类页面**盲点会把权限勾错，改成"一步一句话说给他点"。
 - **`grep -F` 和 `.{0,60}` 不能同时用**（p83 那发）：加了 `-F`，`.` 与 `{0,60}` 全成字面量 ⇒ 五个文件的"原文窗口"齐刷刷空，看着像"页面里没有这段代码"。空窗口先怀疑自己的正则，别下结论。
 - **往 chroot 里塞"一条命令"有两种静默失败，11-02 这一轮各撞一次**（都是白花一轮 adb 的那种）：
   ① **PATH**：`chroot $ROOT /bin/sh -c "tar …"` 继承的是 **Android 那套 PATH**，里面没有 `/usr/bin` ⇒ 报 `tar: not found`、`head: not found`，
