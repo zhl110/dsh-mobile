@@ -1963,4 +1963,13 @@ HTTPS 推仍会撞 `CRYPT_E_NO_REVOCATION_CHECK` ⇒ 照旧走**一次性 SSH UR
 
 **八、这一轮的"没做什么"**：没在第二台机装过、没 reboot、没装包、没重启引擎、没动自启、没碰他那批 `/data/local/tmp` 刷机件；`--split` 那条路没跑到（这一发 901 MB 没超档）；**没验"从 GitHub 下载回来能不能解"**（只验了上传侧的 digest 与本机体侧的 sha 撞上 —— 那是两件不同的事，拉回来解一遍要走 `install-from-scratch.sh --verify` 那条形状，本机没跑）；`/usr` 那 1 GB 多仍未逐文件扫过；闸门一那 539 个串的值一个都没打印（铁律 8）。
 
-**九、提交与推送**（号在下面回填；回填那一发自己的号不写，写了就自指）
+**九、提交与推送**（回填那一发自己的号不写，写了就自指）
+子仓 **`8ab847c`**（完整 `8ab847cb48f2862cd47fa31a673643608219746c`）= 两份脚本的本轮修正 + `AGENTS.md`/`PROGRESS.md`/`RUNBOOK.md`/`docs/INSTALL-from-scratch.md`，6 件、**197 insertions / 36 deletions**。
+推送走**一次性 SSH URL**（`remote.origin.url` 仍是 HTTPS，它照旧撞 `CRYPT_E_NO_REVOCATION_CHECK`）：
+`git push git@github.com:zhl110/dsh-mobile.git main` 回声 `f225e24..8ab847c  main -> main`（退出码 0）；
+`git ls-remote … main` 复点 **`8ab847cb48f2…`**；`git fetch <同一 SSH URL> main:refs/remotes/origin/main` 之后 `git rev-list --count HEAD` 与 `… origin/main` **都是 22**（HTTPS 那发 fetch 仍红，所以这条计数出自 SSH）。
+父仓 `D:/mycode` 同内容本地提交 **`b006ccf`**（完整 `b006ccf9e0c159a9002864bd11df2abdaee41598`；那一发 HEAD 原为 252 发、提交后 **253**；pathspec 带 `dsh-mobile/` 前缀，那仓没配 remote ⇒ 只在本地）。
+**一条要留的的形状**（fetch 时顺带读到的）：`gh release create` 在远端**建了一个 git tag** `payload-20261103-132346Z`，它指向 **`f225e24`** ——
+也就是**发布那一刻的 HEAD**，而**产出这一发产物的是工作区里那几个尚未提交的脚本修正**（`tar_to_file()` / `CHRUN $*` / `DROP frida*`，都在 `8ab847c`）。
+⇒ 想按 tag 复现产物会拿到旧脚本；**复现要用 `8ab847c` 的那两支**，tag 只当"这一发挂在哪次提交上"的坐标用。这是"名字与它指向的东西不是一回事"那一族的又一个形状。
+**回填这一发（本节 + PROGRESS 那两行）自己的号不写** —— 写了就自指。
