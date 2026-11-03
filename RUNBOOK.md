@@ -1865,3 +1865,18 @@ $ bash scripts/dsh-payload-pack.sh --selftest
 **七、我这轮没做什么**：没打成包、没建 Release（`releases` 长度 0）；`install-from-scratch.sh` 的 3b 那步**一行都没实机跑过**（新增，本机连不通 adb）；
 新加的 `--publish` **只验到 `gh` 的表达式与建/删/读回资产**，真 GB 级资产上传没跑；`/usr` 那 1 GB 多没扫；
 `/etc/shadow` 原件里 root 到底是不是哈希**仍然没读数**（现在这条不再是前提：不管是哪种，包里都不发原件）；他的东西一个没碰；没 reboot、没装包、没重启引擎、没改 git 配置。
+
+**八、提交与推送**（11-03 当场复点）
+
+子仓 **`5adcf94`**（完整 `5adcf94978ce47ec6a42d521e57b1334b8f72217`）= 三份脚本 + `AGENTS.md`/`PROGRESS.md`/`RUNBOOK.md`/`docs/INSTALL-from-scratch.md`。
+HTTPS 推仍会撞 `CRYPT_E_NO_REVOCATION_CHECK` ⇒ 照旧走**一次性 SSH URL**（不动 `remote.origin.url`）：
+`git push git@github.com:zhl110/dsh-mobile.git main` 回声 `752c4af..5adcf94  main -> main`（退出码 0）；
+`git ls-remote … main` 复点 **`5adcf94978ce…`**，`git rev-list --count HEAD` 与 `git rev-list --count origin/main` **都是 20**（fetch 后）。
+父仓 `D:/mycode` 同内容本地提交 **`d568008f`**（那一发的 HEAD 原本是 `06be17a8` / 251 发；pathspec 带 `dsh-mobile/` 前缀，那仓没配 remote ⇒ 只在本地）。
+**回填这一发（本节 + PROGRESS 里那一行）自己的号不写** —— 写了就自指。
+
+顺带留一条**我自己的事故**（旧账同族第 2 次，别学）：往 `AGENTS.md` 已知坑追加那发 `gh` 条目时，我把 Edit 的 `old_string`
+写成了"上一条坑（剪贴板那发）+ 新条目的第一行"，于是**把剪贴板那条整条删掉了** —— 与上次删 `grep -F` 那条同一个形状。
+靠 `git diff --stat`（当场看出 `8 insertions / 4 deletions`，那 4 里有 2 行不该是删除）与 `grep -c navigator.clipboard` 读回 **0** 抓到，
+已补回，最终 `git diff --stat` 是 **8 insertions / 2 deletions**（那 2 行删除是命令表两行就地替换，对得上）。
+⇒ 追加型编辑的 `old_string` 只该用**锚点那一行**，别把邻居的正文圈进去。
