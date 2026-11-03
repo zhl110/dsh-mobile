@@ -212,7 +212,8 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
 | 在机上读一份会话记录（`session.v4.jsonl.zstd`） | 见 `scripts/dsh-session-calls-probe75.sh` 第 ① 节那段的形状：`zlib.zstdDecompressSync` 解帧 → 按行 JSON → 取 `type==="tool/call"` → **`JSON.parse(data.arguments)` 才是命令**（`data.arguments` 本身是字符串）。FRAMES/LINES/DECOMP_FAILS 三个数要互相对得上 |
 | 重打 APK | `bash app/build.sh`（版本号在 `AndroidManifest.xml` 与 `build.sh` 两处） |
 | **打 rootfs 产物并挂 Release**（GB 级，不入库） | 一条命令到底：`bash tools/make-payload.sh --publish`（本机自测 → 设备普查 → **机上 `tar -czf` 落文件** → `adb pull` → **机上/PC 三方复点** → 两道闸门 → 指纹/元数据 → 超档切卷 → `gh release create payload-<UTC>` → **读回资产**判成没成）。闸门自测**不需要手机**：`bash scripts/dsh-payload-pack.sh --selftest`（11-03 本机 合计 5 条 PASS 5）。不发布就去掉 `--publish`，只看不出包加 `--dry`。剥除清单的**单一真源是 `scripts/dsh-payload-pack.sh`** 的 `DROP`/`DSH_KEEP`。**现役那一发的 tag 写在 `payload-meta.txt` 与 Release 上**，体积/sha256/条目数**本文件不抄第二份**（抄了就会有两边对不上的一天）。产物落 `release-assets/`（已 gitignore）。**`/etc/shadow` 原件永不进包**，包里是 root 栏 `!` 的生成替代件，靠装机脚本 3b 放回 |
-| **在别人机上装成即装即用** | `bash tools/install-from-scratch.sh`（取包→撞 sha→设备上以 root 解压→3b 放回 `/etc/shadow`→推四件→起入口→烤口令→装 APK）。**从未实机跑过**（现役那台机别跑，见脚本头部警告；真验证要第二台机）。给别人看的说明在 `docs/INSTALL-from-scratch.md` |
+| **在别人机上装成即装即用** | `bash tools/install-from-scratch.sh`（取包→撞 sha→设备上以 root 解压→3b 放回 `/etc/shadow`→推四件→起入口→烤口令→装 APK）。**从未实机跑过**（现役那台机别跑，见脚本头部警告；真验证要第二台机）。给别人看的说明在 `README.md` 与 `docs/INSTALL-from-scratch.md` |
+| **提交之前的隐私闸门**（库已 PUBLIC ⇒ 这步不是可选） | `bash tools/check-private.sh`（扫跟踪区）；`--staged` 扫暂存区、`--selftest` 自证（11-03 本机 `合计 7 条：PASS 7 / FAIL 0`）。真值名单在**不入库**的 `tools/private-values.txt`（已 gitignore），脚本只报形状名与处数、不打印命中内容 |
 | 重跑入口自测（**不需要手机**，Windows 侧就能跑） | `node scripts/dsh-entry.js --selftest`（2026-10-21 当场：`合计 58 条：PASS 58 / FAIL 0`；铁律 12） |
 | 换图标（切五档） | 先把满幅方图存成 `app/icon/icon-src.png`，再 `sh app/icon.sh`，最后重打 APK |
 | 电脑侧取模型 / 推模型 | `bash tools/fetch-sensevoice.sh` / `bash tools/push-sensevoice.sh` |
@@ -326,7 +327,7 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
   两条认证路径不是一个东西，别拿一条的成功推另一条的可行。
   **→ 本轮（10-21 晚）当场量掉了这半**：那把 fine-grained PAT **能建库**（`gh repo create dsh-mobile --private --source . --remote origin` 退出码 0，
   建出来 `private=true`），所以"新建私密库"不用他先去网页上手动建。`agent-hub` 那条 SSH 与 `litellm`/`speaknow` 仍各管各的，本轮没碰。
-- **新建的仓没有 git 身份**：`user.name`/`user.email` 是**父仓 repo-local** 配的（`再来一杯海星酒 <1828980455@qq.com>`），全局没有 ⇒ 新仓里第一次 `git commit` 报
+- **新建的仓没有 git 身份**：`user.name`/`user.email` 是**父仓 repo-local** 配的（`再来一杯海星酒 〈提交邮箱·已遮〉`），全局没有 ⇒ 新仓里第一次 `git commit` 报
   **`Author identity unknown`**（错误行还会把中文用户名打成乱码，别以为那是编码坏了）。
   解法**不是**去 `git config`（他的规矩：不改 git 配置），是**单发传参**：
   `git -c user.name="$(git -C /d/mycode config user.name)" -c user.email="$(git -C /d/mycode config user.email)" commit …`
@@ -389,6 +390,7 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
   撞不上就停，别把"退出码 0 + 字节数对"当链路可信。**附带一条**：`du -sbx /` 里的 `-x` **拦不住 bind 进来的 `/phone`**（与 rootfs 同一个 `st_dev`）⇒ "整树"能读出 375 GB 那种假数，口径要写 `--exclude=/phone`。
 - **改库可见性要 Administration 那项权限，而"外人下得动下不动"只认匿名 Range**（11-03 状态 42，读数 RUNBOOK 14.41 二/四）：那把 fine-grained PAT 原本只有 Contents + 建库 ⇒ `gh repo edit --visibility public` 回 **HTTP 403**（重试还是 403）。**摊开"缺哪一项 + 那一项还附带什么能力"让他一次决定**，他选的是加权限（Administration 同时管删库、改默认分支、改分支保护）。**编辑权限不换令牌值**（只有 Regenerate 才换）⇒ gh 与 GCM 不用重登，也别去动任何配置。翻完之后判"公开可用"用的是 `curl --ssl-no-revoke -L -r 0-1023` 打 Release 资产 ⇒ 要 **206 + 真收到 1024 B + 头四字节 `1f 8b`**；repo 页 200 与 `gh` 退出码 0 都不算（铁律 3）。
 - **要把仓公开之前，扫全历史而不是只看 HEAD**（同轮）：`git log --all -p` 整坨扫凭证形状，顺手数最大跟踪文件与 `.git` 体积（公开后历史里的 blob 删不掉，改历史不算收回去）。**每一发命中都要追进原文再判** —— 那两发 `sk-…` 一发是我自己闸门自测埋的假串、一发是归档 RUNBOOK 里那行 `sk-dummy-invalid-do-not-use`（故意无效的哑 key）。**个人标识先查先例**：那个提交邮箱在他另外两个**公开**库里早就是公开的 ⇒ 不多露一次；设备序列号/机型/root 方案这类**会露但不可逆**的，按事实摆一次，他不改口就执行。
+- **库公开之后，现役文件里不写本机可识别项**（11-03 状态 43，读数 RUNBOOK 14.42）：用户名、带用户名的家目录路径、设备序列号、提交邮箱、写死的口令默认值 —— 这类**不全是凭证，但进了跟踪文件就永久可回看**（改历史不算收回）。⇒ **提交前跑 `bash tools/check-private.sh`**（真值名单在**不入库**的 `tools/private-values.txt`，脚本只报形状名与处数、不打印命中内容；自测 `--selftest` = 埋雷要抓到 / 撤雷要回 0，11-03 当场 `合计 7 条：PASS 7 / FAIL 0`）。同轮两处**行为改了**，别按老写法找：① 五支脚本原来把 adb 默认路径写死成"作者本机带用户名的那发"⇒ 现在一律 `DSH_ADB` → PATH 里的 `adb` → `/d/mycode/.agent-tools/platform-tools/adb.exe`，都没有就停下来让人指；② `app/build.sh` 里签名口令的**默认值撤了**⇒ 库在位而取不到口令直接停。他本机那把 `app/local/dsh.keystore`（2,706 B，10-20 造的）用的就是撤掉的那个老默认值，**已写进 `app/local/ks-pass`（0600，该目录 gitignore）**，`keytool -list` 当场开库成功 ⇒ 重打 APK 不用再传 `DSH_KS_PASS`；换机器/丢文件时才需要 `export DSH_KS_PASS=…`，新造库会现造随机口令并存进这个文件。
 - **内置浏览器没有他的登录态；驱动他的 Edge 只能坐标点，他手在动就立刻停手**（同轮）：`browser-use` 打开 GitHub 设置页直接跳 `/login` ⇒ 替不了他点。可用形状：`msedge.exe "<URL>"` 在现有实例里开新标签（进程数复点 18→20）+ `user32!SetCursorPos`/`mouse_event`（`tools/win-click.ps1`）+ `CopyFromScreen` 截图回看（`tools/win-shot.ps1`）—— **这两支已入库**：`downloads/` 是忽略区，文档引用它等于引用一个别人拉不到的文件。**每发点击后把 `GetCursorPos` 与请求值比**：一致才继续（`617,437→461,282`、`600,30→636,35` 那两发就是他在动鼠标）⇒ 在**令牌与权限类页面**盲点会把权限勾错，改成"一步一句话说给他点"。
 - **`grep -F` 和 `.{0,60}` 不能同时用**（p83 那发）：加了 `-F`，`.` 与 `{0,60}` 全成字面量 ⇒ 五个文件的"原文窗口"齐刷刷空，看着像"页面里没有这段代码"。空窗口先怀疑自己的正则，别下结论。
 - **往 chroot 里塞"一条命令"有两种静默失败，11-02 这一轮各撞一次**（都是白花一轮 adb 的那种）：

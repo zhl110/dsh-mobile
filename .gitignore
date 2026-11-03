@@ -1,6 +1,8 @@
 downloads/
 app/local/
 app/out/
+# 本机可识别项名单（tools/check-private.sh 的输入）：值只留在本机，名单本身不许入库。2026-11-03 加。
+tools/private-values.txt
 # GB 级的 rootfs 产物不入库（git 存不了属主与 setuid，且单文件超 100 MB 直接被拒）：
 # 它挂 GitHub Release，仓里只留 tools/make-payload.sh + scripts/dsh-payload-pack.sh 这两支再造它的脚本。
 # 见 docs/INSTALL-from-scratch.md。2026-11-02 加。

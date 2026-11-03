@@ -18,8 +18,11 @@ set -u
 
 APK=app/out/dsh-app.apk
 PKG=com.zhl.dsh
-ADB="${DSH_ADB:-/d/mycode/.agent-tools/platform-tools/adb.exe}"
-[ -x "$ADB" ] || ADB="C:/Users/周海龙/DeskBox/我的桌面/platform-tools/adb.exe"
+# adb 找法：DSH_ADB 指路径 → PATH 里的 adb → 本仓约定那发（原来这条兜底是作者本机带用户名的路径，2026-11-03 移除）
+if [ -n "${DSH_ADB:-}" ]; then ADB="$DSH_ADB"
+elif command -v adb >/dev/null 2>&1; then ADB=adb
+else ADB=/d/mycode/.agent-tools/platform-tools/adb.exe; fi
+[ -x "$ADB" ] || { echo "!! 找不到 adb：export DSH_ADB=<你的 adb 路径>"; exit 1; }
 [ -f "$APK" ] || { echo "!! 没有成品：$APK（要重打就自己跑 bash app/build.sh，但那会让已报的 sha 作废）"; exit 1; }
 command -v sha256sum >/dev/null || { echo "!! 要 git-bash 的 sha256sum"; exit 1; }
 export MSYS2_ARG_CONV_EXCL='*'

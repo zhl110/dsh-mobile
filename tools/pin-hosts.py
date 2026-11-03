@@ -19,6 +19,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import urllib.request
@@ -52,7 +53,8 @@ CANONICAL = [
     "::1\tlocalhost ip6-localhost ip6-loopback",
 ]
 
-DEFAULT_ADB = r"C:\Users\周海龙\DeskBox\我的桌面\platform-tools\adb.exe"
+# adb 找法：DSH_ADB → PATH 里的 adb → 本仓约定那发（原来写死的是作者本机带用户名的路径，2026-11-03 移除）
+DEFAULT_ADB = os.environ.get("DSH_ADB") or shutil.which("adb") or r"D:\mycode\.agent-tools\platform-tools\adb.exe"
 HOSTS = "/data/local/dsh-rootfs/etc/hosts"
 TMP_ON_DEVICE = "/data/local/tmp/hosts.dsh-mobile"
 

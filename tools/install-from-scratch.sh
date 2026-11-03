@@ -25,9 +25,11 @@ set -u
 export MSYS2_ARG_CONV_EXCL='*'
 cd "$(dirname "$0")/.."
 
-ADB="${DSH_ADB:-/d/mycode/.agent-tools/platform-tools/adb.exe}"
-[ -x "$ADB" ] || ADB="C:/Users/周海龙/DeskBox/我的桌面/platform-tools/adb.exe"
-[ -x "$ADB" ] || { echo "!! 找不到 adb（两条路径都试过；用 DSH_ADB=... 指一下）"; exit 1; }
+# adb 找法：DSH_ADB 指路径 → PATH 里的 adb → 本仓约定那发（原来第二条是作者本机带用户名的路径，2026-11-03 移除）
+if [ -n "${DSH_ADB:-}" ]; then ADB="$DSH_ADB"
+elif command -v adb >/dev/null 2>&1; then ADB=adb
+else ADB=/d/mycode/.agent-tools/platform-tools/adb.exe; fi
+[ -x "$ADB" ] || { echo "!! 找不到 adb：用 DSH_ADB=<你的 adb 路径> 指一下"; exit 1; }
 command -v sha256sum >/dev/null || { echo "!! 要 git-bash 的 sha256sum"; exit 1; }
 
 ROOT=/data/local/dsh-rootfs

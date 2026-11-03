@@ -9,9 +9,14 @@ AAPT2="$TOOLS/aapt2.exe"
 R8="$TOOLS/dl/r8-9.4.15.jar"
 APKSIG="$TOOLS/dl/apksig-9.4.1.jar"
 APIJAR="$TOOLS/platforms/android-35/android.jar"
-ADB="${DSH_ADB:-C:/Users/周海龙/DeskBox/我的桌面/platform-tools/adb.exe}"
+# adb 找法：DSH_ADB 指路径 → PATH 里的 adb → 本仓约定那发；都没有就停下来让人指（原来这里写死了作者本机带用户名的路径，2026-11-03 移除）
+if [ -n "${DSH_ADB:-}" ]; then ADB="$DSH_ADB"
+elif command -v adb >/dev/null 2>&1; then ADB=adb
+else ADB=/d/mycode/.agent-tools/platform-tools/adb.exe; fi
 
-KS_PASS="${DSH_KS_PASS:-dsh-local-2026}"
+# 签名口令不写进仓：DSH_KS_PASS → app/local/ks-pass（该目录已 gitignore）→ 都没有就在造库那一刻现造一把随机口令存进去
+KS_PASS="${DSH_KS_PASS:-}"
+if [ -z "$KS_PASS" ] && [ -f local/ks-pass ]; then KS_PASS=$(cat local/ks-pass); fi
 PKG=com.zhl.dsh
 MIN_API=26
 VER_CODE=10
@@ -62,6 +67,9 @@ for f in glob.glob(r'src/com/zhl/dsh/*.java'):
 # 2) 没有签名库就先造一把自签的（只用于本机装机；丢了就要卸了重装）
 if [ ! -f local/dsh.keystore ]; then
   mkdir -p local
+  [ -n "$KS_PASS" ] || KS_PASS=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
+  printf '%s' "$KS_PASS" > local/ks-pass && chmod 600 local/ks-pass
+  echo "[ok] 签名口令落在 local/ks-pass（0600，该目录已 gitignore，值不打印）"
   KS_TMP=local/.ks.pw
   printf '%s' "$KS_PASS" > "$KS_TMP"
   keytool -genkeypair -keystore local/dsh.keystore -storetype PKCS12 -alias dsh \
@@ -71,6 +79,7 @@ if [ ! -f local/dsh.keystore ]; then
   rm -f "$KS_TMP"
   echo "[ok] 造了自签库 local/dsh.keystore（$(wc -c <local/dsh.keystore) B）"
 fi
+[ -n "$KS_PASS" ] || { echo "!! 库已在位但取不到签名口令：export DSH_KS_PASS=… 或把口令写进 app/local/ks-pass"; exit 1; }
 
 # 3) javac → class
 # -J-Duser.language=en：不加这条，javac 的报错会用 GBK 中文吐到 UTF-8 的终端上，成乱码读不了（2026-10-20 实测）

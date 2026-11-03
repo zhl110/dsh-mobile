@@ -859,8 +859,8 @@ proot 相关那一族（`nativeLibraryDir` 躲 W^X、不 bind `/linkerconfig`、
   本仓 `git log --oneline -3`、父仓 `git -C /d/mycode log --oneline -1 -- dsh-mobile`。
 
 **又一发小坑（新仓没有身份，别改他的 git config）**：`git commit` 在这建新仓里报 **`Author identity unknown`**（`user.name`/`user.email` 是**父仓 repo-local** 配的，全局没有），
-错误里那行 `got '周海龙@…(none)'` 还把中文用户名打成了乱码。我**没有**去写 `git config`（他的规矩：不改 git 配置），
-改成单发传参：`git -c user.name="$NAME" -c user.email="$MAIL" commit …`，那对值从 `git -C /d/mycode config user.name|user.email` 取来（`再来一杯海星酒 <1828980455@qq.com>`），
+错误里那行 `got '〈本机用户名·已遮〉@…(none)'` 还把中文用户名打成了乱码。我**没有**去写 `git config`（他的规矩：不改 git 配置），
+改成单发传参：`git -c user.name="$NAME" -c user.email="$MAIL" commit …`，那对值从 `git -C /d/mycode config user.name|user.email` 取来（`再来一杯海星酒 <〈提交邮箱·已遮〉>`），
 ⇒ 提交出来的 author 与 committer 和他原本那 5 发**完全一致**（`git log -1 --format='%an <%ae> / %cn <%ce>'` 复点过），新仓也没多出一条我没经他同意就写下的配置。
 以后在本目录建仓类新仓第一次提交都走这条；若他要新仓自带身份，那是他一句话的事（`git config user.*` 我没动）。
 
@@ -1683,9 +1683,9 @@ Android 的 WebView **没有"复制"这个壳侧回调**（复制是 Chromium �
 
 **六、没打成包的那一半：手机在这一轮中途掉回 offline**
 
-`adb devices` 从 `f22aa1e1 device` 变成 `f22aa1e1 offline`，此后一直 offline。试过并复点过的：
+`adb devices` 从 `〈序列号·已遮〉 device` 变成 `〈序列号·已遮〉 offline`，此后一直 offline。试过并复点过的：
 `adb reconnect`、`adb reconnect offline`、`adb kill-server` + `start-server`（两次）、
-两个 adb 二进制（`/d/mycode/.agent-tools/…` 与 `DeskBox/…/platform-tools/`）**读数一致**，`adb shell` 直接回 `device offline`；
+两个 adb 二进制（`/d/mycode/.agent-tools/…` 与作者本机 `…/platform-tools/` 那发，路径已遮）**读数一致**，`adb shell` 直接回 `device offline`；
 Windows 侧枚举正常：`ADB Interface` `Status=OK`，`InstanceId=USB\VID_22D9&PID_2765&MI_01\7&188A6EB7&1&0001`（ Composite 在 `VID_22D9&PID_2765\F22AA1E1`）
 ⇒ **不是 PC 侧驱动或 adb 的事**，是手机侧那条调试会话掉了（这台机的老形状：重插 USB / 在弹窗里勾"一律允许" / 撤销调试授权重授）。
 **payload 只存在于这台机上**，所以打包这一格在他之前谁也代替不了。设备掉线前跑完的只有普查（上面那三个数）。
@@ -1716,7 +1716,7 @@ Windows 侧枚举正常：`ADB Interface` `Status=OK`，`InstanceId=USB\VID_22D9
 **一、先说做不到的那半为什么做不到（读数，不是推）**
 
 ```
-adb devices -l                → f22aa1e1  offline  transport_id:1
+adb devices -l                → 〈序列号·已遮〉  offline  transport_id:1
 adb reconnect offline         → 列表变空（条目直接消失）
 kill-server + start-server    → 又回 offline
 adb mdns services             → List of discovered mdns services（空，机上没开无线调试）
@@ -1727,7 +1727,7 @@ Get-PnpDevice -PresentOnly VID_22D9 → ADB Interface OK / USB Composite Device 
 ```
 
 **Windows 承认这个 USB 设备、adb 承认它存在但求不出握手** ⇒ 是**手机侧那条调试会话**掉了，PC 侧没有能自己按下去的按钮（要重插 USB，或在弹窗里勾"一律允许"）。
-顺带把"PC 上是不是留着一份 rootfs 可以替着打包"也量了：`find /d/tools /d/mycode /c/Users/周海龙/Downloads -maxdepth 3 -size +50M` 只回两条 ——
+顺带把"PC 上是不是留着一份 rootfs 可以替着打包"也量了：`find /d/tools /d/mycode /c/Users/〈本机用户名·已遮〉/Downloads -maxdepth 3 -size +50M` 只回两条 ——
 `/d/mycode/backups/stock_boot.img`（他那批刷机件，没碰）与 `/d/mycode/sokuji.tar.gz`（别的项目）⇒ **rootfs 只在那台机上**，这一格谁也替不了。
 
 **二、Release 的上传权限这格今晚量掉了（canary，验完即删）**
@@ -1984,7 +1984,7 @@ HTTPS 推仍会撞 `CRYPT_E_NO_REVOCATION_CHECK` ⇒ 照旧走**一次性 SSH UR
 | 提交数 | `git rev-list --count --all` = **23**、`git log --all -p` 全量 **2,677,176 B**（扫的就是这一整坨，不是只看 HEAD） |
 | 凭证形状 | `sk-[A-Za-z0-9]{20,}` 全历史命中 **1 行** ⇒ 追进去是 `scripts/dsh-payload-pack.sh` 里闸门自测埋的假串 `FAKEKEY="sk-SELF…"`；`apiKey|api_key|access_token|secret|password` 带 16 位以上值的命中 **1 行** ⇒ 在 `RUNBOOK-archived.md:134`，原文是 **`sk-dummy-invalid-do-not-use`**（故意无效的哑 key，那发是为了证明请求真离开过手机） |
 | 配置模板 | `config/dsh-env` 只有 **3** 个 export（`DSH_PERMISSION_MODE` / `DSH_UNSHARE_RUN_ALLOW_NO_PIDNS` / `DSHM_NPM_MIRROR`），值长 15 / 1 / 30，**没有 API key**；`reference/dsh-web-default-config.txt` 里"键名字段带 ≥12 位值"命中 **0** |
-| 个人标识 | 手机序列号 `f22aa1e1` 命中 **6 行**（文档里的复点读数）；提交作者邮箱 `1828980455@qq.com` 命中 **28 行**（每发的 Author/Committer 头）⇒ 去查先例：他另外两个**公开**库 `speakmore-windows`、`memory-workstation` 的最新提交用的就是同一个邮箱 ⇒ **这次不多露一次**（另两库用的是 `75671644+zhl110@users.noreply.github.com` 与 `zhl110@users.noreply.github.com`） |
+| 个人标识 | 手机序列号 `〈序列号·已遮〉` 命中 **6 行**（文档里的复点读数）；提交作者邮箱 `〈提交邮箱·已遮〉` 命中 **28 行**（每发的 Author/Committer 头）⇒ 去查先例：他另外两个**公开**库 `speakmore-windows`、`memory-workstation` 的最新提交用的就是同一个邮箱 ⇒ **这次不多露一次**（另两库用的是 `75671644+zhl110@users.noreply.github.com` 与 `zhl110@users.noreply.github.com`） |
 
 ⇒ 结论：**没有真凭证会被公开**。会露出去的是设备信息（序列号、机型、KernelSU/susfs 这套 root 方案、"引擎直跑不弹窗"这个形态）与那 901 MB 包本身；服务只绑 `127.0.0.1`，不做端口转发就摸不到 —— **这是读数，不是保证**。这两条我按事实摆给他，没有替他改主意。
 
@@ -2026,8 +2026,57 @@ meta     …/download/…/payload-meta.txt                            => HTTP 20
 子仓 **`836b36a`**（完整 `836b36ae5585b9ff130f7f0be2a08e4edd309ef7`）= `AGENTS.md`/`PROGRESS.md`/`RUNBOOK.md`/`docs/INSTALL-from-scratch.md` 四件、**66 insertions / 2 deletions**；
 一次性 SSH URL 回声 `03135a7..836b36a  main -> main`（退出码 0），`git fetch <同一 SSH URL> main:refs/remotes/origin/main` 之后 `git rev-list --count HEAD` 与 `… origin/main` **都是 24**（HTTPS 那发照旧撞 `CRYPT_E_NO_REVOCATION_CHECK`，`remote.origin.url` 没动）。
 父仓 `D:/mycode` 同内容本地提交 **`554e767`**（完整 `554e7676a6e8c6db6d01cac0fa0d9a5c1297d3f1`；pathspec 带 `dsh-mobile/` 前缀，那仓没配 remote ⇒ 只在本地）。
-**一条从此可回看的事实**：库公开之后，这些提交的作者字段 `再来一杯海星酒 <1828980455@qq.com>` 对任何人可见 —— 先例复点见本节一（他另两个公开库用的就是同一个邮箱），所以这不是新泄，但**要收回只能删库重建，改历史不算**。
+**一条从此可回看的事实**：库公开之后，这些提交的作者字段 `再来一杯海星酒 <〈提交邮箱·已遮〉>` 对任何人可见 —— 先例复点见本节一（他另两个公开库用的就是同一个邮箱），所以这不是新泄，但**要收回只能删库重建，改历史不算**。
 
 **六·补（同一轮收尾，北京 22:0x 当场重读，不是抄上一发）**：上一发文档指着忽略区的 `downloads/click.ps1` / `downloads/shot.ps1` —— 现役文档不能指着别人拉不到的文件 ⇒ 两支抄进跟踪区 `tools/win-click.ps1`（**1,126 B**）与 `tools/win-shot.ps1`（**466 B**），CR 逐支 `tr -dc '\r' | wc -c` 复点 = **0**，引用两处（AGENTS 已知坑一条、本节三）就地改口。
 子仓那一发 `fd93ac8`：**4 files changed, 38 insertions(+), 2 deletions(-)**，一次性 SSH URL 回声 `2484d7f..fd93ac8  main -> main`；父仓同内容本地提交 `f101dc1`（那仓 `git log` 顶部三发 = `f101dc1` / `f411a0b` / `554e767`，仍无 remote ⇒ 只落本地）。
 报告发出前重撞的四个数：`gh repo view --json visibility` 回 **`PUBLIC`**；`git rev-list --count HEAD` 与 `… origin/main` **都是 26**、`origin/main..HEAD` = **0**；匿名 Range `0-1023` 打那件 901 MB ⇒ **HTTP 206 / 1024 B / 头四字节 `1f 8b 08 00`**；匿名取 `payload-meta.txt` ⇒ **HTTP 200 / 1,611 B / sha256 前缀 `fbcf1da545ce`**（测试件 `downloads/anon-recheck.bin` 打完即删，`anon-meta-recheck.txt` 留着当这一节的出处）。
+
+### 14.42 他两句："Readme 文件还有 Release 都要一起" ＋ "注意不要在里面提交我本地的一些私密的信息"（2026-11-03 北京 22:1x–22:4x，手机在场但一个字节没动）
+
+**一、先普查，口径写死**（都走 `git grep -I -c` 数**跟踪区**，`awk -F: '{s+=$NF}'` 相加 ⇒ 下面每个数当场可重跑，铁律 2/12）。遮之前那一发的读数：
+
+| 形状 | 文件 | 处数 | 判 |
+|---|---|---|---|
+| 设备序列号（那 8 位十六进制） | 3 | 7 | **遮**（本机可识别） |
+| 本机用户名（中文那三个字） | 8 | 10 | **遮**，其中 6 处是**写死的 adb 默认路径** |
+| Windows 家目录路径（Users 下带用户名那一串） | 7 | 7 | **遮**/改成可移植找法 |
+| 提交邮箱 | 3 | 6 | **遮**（值本身在他另两个公开库里早已有，但文档不该再重抄） |
+| 签名库口令的**默认值** | 1 | 1 | **撤掉默认值**（这是本轮唯一一条真凭证形状） |
+| `github_pat_` | 1 | 2 | **假警报**：两发 `len=11` ⇒ 是 RUNBOOK 里那句"gh 用的是 fine-grained PAT"的**词**，不是令牌 |
+| `sk-[A-Za-z0-9]{20,}` | 1 | 1 | **假警报**：`sk-SELFTEST0000000000000000000000ab`（35 B，闸门自测埋的雷） |
+| `ghp_[A-Za-z0-9]{36}` / `AKIA…` / `BEGIN … PRIVATE KEY` | 0 | 0 | 干净 |
+| 机型（一加 13）/ root 方案（KernelSU·susfs·kpatch） | 10 / 13 | 12 / 45 | **没遮**：这俩是这项目的**前提与形态**，遮了别人读不懂怎么装机；要遮是他一句话 |
+| 工作区路径 `D:\mycode` | 12 | 36 | **没遮**：它是文档里"pathspec 要带前缀"那类**指令**的坐标，不是身份标识 |
+
+**二、全历史也扫了一遍**（公开不可逆 ⇒ 只看 HEAD 不够）：`git log --all -p > downloads/hist-patch.txt`（**2,718,119 B**），`grep -c -E` 数 patch 行 + `git log --all -S<串>` 数发数 ——
+
+| 项 | patch 行数 | 涉及提交 |
+|---|---|---|
+| 序列号 | 8 | 5 |
+| 用户名 | 12 | 6 |
+| 邮箱 | 36 | 4（**大头是每发的 Author/Commit 元数据**，不是正文） |
+| 那个目录名 | 9 | 4 |
+| 签名口令默认值 | 3 | 1 |
+| `sk-{20,}` | 1 | 那条是假串 |
+| `ghp_` / `github_pat_{20,}` / PRIVATE KEY | 0 | — |
+
+⇒ **结论：历史里没有真 API key、没有令牌、没有私钥**；会永久可回看的是**序列号 / 用户名与带它的家目录路径 / 邮箱（含每发提交元数据）/ 那个口令默认值**。要收回只能**改写历史 + 强推**或删库重建 —— 这不是我能替他定的，本轮**一条都没动历史**，只把现役件遮干净并立了道闸门（下一发起不再新增）。
+
+**三、改了哪些（两条线，别混）**
+线 A（**可用性**，这条本来就是"给别人装"的拦路石）：`app/build.sh`、`tools/deploy-entry.sh`、`tools/install-apk.sh`、`tools/install-from-scratch.sh`、`tools/make-payload.sh` 五支的 adb 找法统一成 **`DSH_ADB` → PATH 里的 `adb` → `/d/mycode/.agent-tools/platform-tools/adb.exe`**，都没有就停下来让人指；`tools/pin-hosts.py` 同形（加了 `import shutil` 才敢用 `shutil.which`）；`tools/make-payload.sh` 那句"要 gh（本机路径：…）"改成"要 gh CLI 且登录过"；`scripts/dsh-market-catalog-probe42.sh` 头注释里那条带用户名的源码路径改成"本机 desktop profile 下的 `node_modules/dshmarket/lib/`，各人路径不同"；`tools/fetch-sensevoice.sh` 那句提示里的 `-s <序列号>` 改成"多台机就自己加 `-s <序列号>`"。七支 `bash -n` + `pin-hosts.py` `ast.parse` **全过**。
+线 B（**隐私**）：文档里就地遮 —— RUNBOOK 序列号 4 处 / 用户名 2 处 / 目录名 1 处 / 邮箱 3 处，PROGRESS 序列号 3 处 / 邮箱 2 处，AGENTS 邮箱 1 处；遮法一律写成 `〈序列号·已遮〉` `〈本机用户名·已遮〉` `〈提交邮箱·已遮〉` 这种**看得见是遮过**的形式（不是悄悄删）。遮完复点：这四个形状在跟踪区**全 0**。
+`app/build.sh` 的签名口令**默认值撤了** ⇒ 他本机那把 `app/local/dsh.keystore`（**2,706 B**，10-20 01:05 造的）用的正是老默认值，所以把值从名单里取出来写进 **`app/local/ks-pass`（0600，`app/local/` 已 gitignore）**，再用 `keytool -list` 当场开库 ⇒ 回 `PKCS12 / 密钥库包含 1 个条目`（那行是 GBK 乱码，能开就是能开）⇒ **重打 APK 不用他手传 `DSH_KS_PASS`**。**没重打 APK**（报过的 sha 不作废）。
+
+**四、新闸门 `tools/check-private.sh`**（为什么不是"我记得别写就行"）：这类"提交时顺手就带上"的东西必须**代码兜住**。三档：无参扫跟踪区、`--staged` 扫暂存区（能挂 pre-commit）、`--selftest` 自证。**只报形状名 / 文件 / 处数，命中内容一律不上屏**（命中的可能就是真值，铁律 8）。真值名单在 **`tools/private-values.txt`（这行已进 `.gitignore`）** ⇒ 名单本身不会把值带进仓；**名单不在位或是空的 ⇒ 记一次命中，不静默通过**（与 `scripts/dsh-payload-pack.sh` 那道闸门同一个规矩）。
+第一跑抓到三个自伤，都是这类逻辑特有的：① **闸门扫到了自己写的形状字面量**（`macOS 家目录` 那条正则的字面量正好被自己命中）⇒ pathspec 加 `:(exclude)tools/check-private.sh`；② 计数用 `-h` 拿内容再 `grep -cv` 与"文件列表"不同源 ⇒ 改成一份 `git grep -n` 输出走管道、从**过滤后**的那份里取处数与文件名；③ 这版 git **`git add` 不认 `-q`**（`error: unknown switch 'q'`）⇒ 改重定向，连带把自测里 `head -1 名单` 取到**注释行**这个假通过也改了（现在先去注释再取第一条）。
+读数：`--selftest` = **合计 7 条：PASS 7 / FAIL 0**（A 埋雷被拦住 rc=1、B sk 抓到、C Windows 家目录抓到、D 序列号位抓到、E 名单抓到值、F 撤雷回 0、G 临时件已清）；无参扫 = **合计命中 = 0，`real 0m5.017s`**。
+`shortcut:` 形状表手写，新形状（换了口令前缀之类）在脚本里加一行；`--selftest` **不覆盖**"名单不在位"那一格（那要临时改名，太脏）。
+
+**五、README.md 建了**（这仓之前**没有 README** ⇒ GitHub 首页是空的，而"即装即用"的门面就在首页）。写的是：三层结构图、要什么机器（arm64 + root；体积口径直接引 `payload-meta.txt` 那 **2,633,803,541 B ≈ 2.6 GB**，建议留 3.5 GB）、**装**（`gh release download payload-20261103-132346Z` 两条 + `bash tools/install-from-scratch.sh`）、包里有/明确没有、怎么重造一个包、改档位要走 `deploy-env.sh` 且**必须重启引擎**、提交前跑这道隐私闸门、目录职责表。**没写进去的**：体积/sha 的第二份真源（指回 `payload-meta.txt`，AGENTS 那条"不抄第二份"照守）、序列号/用户名/邮箱/口令。
+**如实那句写进 README 正文了**：`install-from-scratch.sh` 没在干净机上实机跑过 ⇒ "装完能用"目前只有设计证据。
+
+**六、Release 说明同步改了**：`gh release edit --notes`（多段 `NOTES="${NOTES}…"` 拼，不碰那条老续行坑），加了"仓库门面与装法在 **README.md**"与"逐轮做法见 RUNBOOK 14.40 / 隐私普查 14.42"。**读回才算**：`gh release view --json body` 回 **522 字符**、`grep -c 'README.md'` = **1**，三件资产名字与字节照旧（`…tar.gz 945106711` / `payload-meta.txt 1611` / `SHA256SUMS 101`）⇒ 只改了说明，**没重新上传、没换 sha**。
+
+**七、这一轮的"没做什么"**：**没改写 git 历史、没强推**（所以二里那四项在已公开的历史里仍看得见 —— 要收回得他点头）；没删库、没动默认分支与分支保护、没重新生成令牌；**没重打 APK**（`build.sh` 改了取口令的方式但没跑全量构建，报过的 sha 不作废）；**没在干净机上跑 `install-from-scratch.sh`**（README 里那句实话就是为这格写的）；没验"从 GitHub 整包拉回来能不能解"；**没动手机一个字节**（没起停引擎、没推件、没跑探针 ⇒ 也就不需要复原现场）；机型与 root 方案那 57 处**按判断留着**，要遮是他一句话；`D:\mycode` 那 36 处同理。
+

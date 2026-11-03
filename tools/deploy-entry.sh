@@ -27,9 +27,11 @@
 #   sh tools/deploy-entry.sh --pull-key   把机上的入口口令拉到 app/local/entry.key（之后要重建 APK）
 set -u
 
-ADB="${DSH_ADB:-C:/Users/周海龙/DeskBox/我的桌面/platform-tools/adb.exe}"
-[ -x "$ADB" ] || ADB="/d/mycode/.agent-tools/platform-tools/adb.exe"
-[ -x "$ADB" ] || { echo "!! 找不到 adb（两条路径都试过）"; exit 1; }
+# adb 找法：DSH_ADB 指路径 → PATH 里的 adb → 本仓约定那发（原来第二条是作者本机带用户名的路径，2026-11-03 移除）
+if [ -n "${DSH_ADB:-}" ]; then ADB="$DSH_ADB"
+elif command -v adb >/dev/null 2>&1; then ADB=adb
+else ADB=/d/mycode/.agent-tools/platform-tools/adb.exe; fi
+[ -x "$ADB" ] || { echo "!! 找不到 adb：export DSH_ADB=<你的 adb 路径>"; exit 1; }
 
 # Git-Bash 会把 /data/local/tmp/x 这种参数改写成 D:/program files/Git/data/local/tmp/x 再交给 adb
 # （2026-10-20 实测："remote secure_mkdirs() failed: No such file or directory"）。

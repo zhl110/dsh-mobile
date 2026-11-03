@@ -2,7 +2,7 @@
 # dsh-market-catalog-probe42.sh —— 只读：手机上「插件市场一直在加载插件目录」到底卡在哪一层
 #
 # 他 18:4x 报的：进 App → 插件市场 → 「正在加载插件目录…」一直不消失。
-# 读 PC 侧那份 dshmarket 的源码（C:\Users\周海龙\.dsh\profiles\desktop\node_modules\dshmarket\lib\）
+# 读 PC 侧那份 dshmarket 的源码（本机 desktop profile 下的 node_modules/dshmarket/lib/，各人路径不同）
 # 先知道了这三件事，所以这一发是去验它们在他机上成不成立：
 #   1) 目录不是打包在前端的，是**每次请求都现取**：regions.js 里 china 区先取
 #      mirrors.cloud.tencent.com/npm 上那个 dsh-plugin-catalog 包，取不到才回 awesome-dsh-plugin.com/plugins.json；

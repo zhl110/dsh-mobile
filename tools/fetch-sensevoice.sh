@@ -26,7 +26,7 @@ ADB=${DSH_ADB:-}
 VERIFY_ONLY=0
 [ "${1:-}" = "--verify" ] && VERIFY_ONLY=1
 
-[ -f "$ASSETS" ] || { echo "!! 清单不在位：$ASSETS"; echo "   先从手机上把包里那份拉下来（脚本下面这条，只读）："; echo "   $ADB -s f22aa1e1 shell \"su -c 'cat /data/local/dsh-rootfs/usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-experimental-speech-to-text-sensevoice/runtime/assets.json'\" | tr -d '\\r' > $ASSETS"; exit 1; }
+[ -f "$ASSETS" ] || { echo "!! 清单不在位：$ASSETS"; echo "   先从手机上把包里那份拉下来（脚本下面这条，只读；多台机就自己加 -s <序列号>）："; echo "   $ADB shell \"su -c 'cat /data/local/dsh-rootfs/usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-experimental-speech-to-text-sensevoice/runtime/assets.json'\" | tr -d '\\r' > $ASSETS"; exit 1; }
 command -v curl.exe >/dev/null 2>&1 || { echo "!! 这台机没有 curl.exe"; exit 1; }
 command -v sha256sum >/dev/null 2>&1 || { echo "!! 这台机没有 sha256sum（Git-Bash 自带）"; exit 1; }
 

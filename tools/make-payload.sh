@@ -25,9 +25,11 @@
 set -u
 export MSYS2_ARG_CONV_EXCL='*'
 
-ADB="${DSH_ADB:-/d/mycode/.agent-tools/platform-tools/adb.exe}"
-[ -x "$ADB" ] || ADB="C:/Users/周海龙/DeskBox/我的桌面/platform-tools/adb.exe"
-[ -x "$ADB" ] || { echo "!! 找不到 adb（两条路径都试过）"; exit 1; }
+# adb 找法：DSH_ADB 指路径 → PATH 里的 adb → 本仓约定那发（原来第二条是作者本机带用户名的路径，2026-11-03 移除）
+if [ -n "${DSH_ADB:-}" ]; then ADB="$DSH_ADB"
+elif command -v adb >/dev/null 2>&1; then ADB=adb
+else ADB=/d/mycode/.agent-tools/platform-tools/adb.exe; fi
+[ -x "$ADB" ] || { echo "!! 找不到 adb：export DSH_ADB=<你的 adb 路径>"; exit 1; }
 command -v gzip >/dev/null && command -v sha256sum >/dev/null || { echo "!! 要 git-bash 的 gzip / sha256sum"; exit 1; }
 
 ROOT=/data/local/dsh-rootfs
@@ -182,7 +184,7 @@ echo "[done] $OUT"
 # --publish = 出包完直接挂 Release（他 11-03 那句"先不验证，直接提交"）。
 # 传哪几件：超档切卷时**只传卷**（原件不重复传一遍 GB），加 SHA256SUMS 与 payload-meta.txt。
 if [ "$PUB" = 1 ]; then
-  command -v gh >/dev/null || { echo "!! 要 gh（本机路径：C:\\Users\\周海龙\\AppData\\Local\\Microsoft\\WinGet\\Links\\gh.exe）"; exit 1; }
+  command -v gh >/dev/null || { echo "!! 要 gh CLI（GitHub 官方，装完在 PATH 里）并且它得先登录过"; exit 1; }
   TAG=payload-$TS
   ASSETS=("$OUTDIR/SHA256SUMS" "$META")
   if ls "$OUT"-part-* >/dev/null 2>&1; then
