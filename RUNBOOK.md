@@ -2080,3 +2080,10 @@ meta     …/download/…/payload-meta.txt                            => HTTP 20
 
 **七、这一轮的"没做什么"**：**没改写 git 历史、没强推**（所以二里那四项在已公开的历史里仍看得见 —— 要收回得他点头）；没删库、没动默认分支与分支保护、没重新生成令牌；**没重打 APK**（`build.sh` 改了取口令的方式但没跑全量构建，报过的 sha 不作废）；**没在干净机上跑 `install-from-scratch.sh`**（README 里那句实话就是为这格写的）；没验"从 GitHub 整包拉回来能不能解"；**没动手机一个字节**（没起停引擎、没推件、没跑探针 ⇒ 也就不需要复原现场）；机型与 root 方案那 57 处**按判断留着**，要遮是他一句话；`D:\mycode` 那 36 处同理。
 
+**八、提交与推送**（回填那一发自己的号不写）
+提交前复点：`git add -- .` ⇒ `bash tools/check-private.sh --staged` **合计命中 = 0**。第一跑这里可是 **2** —— 我自己新写的两行文档里把那条 Windows 家目录形状的**字面量**写了出来，被自家闸门拦住（`文件：PROGRESS.md RUNBOOK.md`）；改成"Users 下带用户名那一串"的说法才过。**这道闸门第一天就抓到了写它的人**，所以"0"这个读数不是走过场。
+子仓 **`e3dd32c`**（完整 `e3dd32c52bfc59fb68e5252c4d7b35873122d21f`）= **14 件、285 insertions / 32 deletions**，新增 `README.md`（**4,717 B**）与 `tools/check-private.sh`（**92 行**）；一次性 SSH URL 回声 `8f92921..e3dd32c  main -> main`，`git fetch <同一 SSH URL> main:refs/remotes/origin/main` 之后 `rev-list --count` HEAD 与 origin/main **都是 28**、`origin/main..HEAD` = **0**，`git rev-parse origin/main` = `e3dd32c52bfc…` ⇒ 远端复点到这一发才算真上去。
+README 在 GitHub 上的**落字节判据**：`raw.githubusercontent.com` 这一发回 **HTTP 502 / 0 B**（这台机上那条域名历来不稳，别拿它判死），改用 `api.github.com/repos/…/contents/README.md` 带 `Accept: application/vnd.github.raw+json` ⇒ **HTTP 200 / 4,717 B**，与本机那份 **`cmp` 逐字节撞**、sha256 前缀两边同为 **`4216b413749ea6f2`**；repo 页 HTML 里也能数到我 README 那句"把 DeepSeek Harness" **2 处**。取回的临时件当场删，远端那份再扫那四个形状 ⇒ **全 0**。
+父仓 `D:/mycode` 同内容本地提交 **`23fbbead`**（pathspec 带 `dsh-mobile/` 前缀；那仓仍无 remote ⇒ 只落本地），父仓范围内这四个形状也复点为 **0**。
+Release 那一发不是提交，读回写在六（body **522 字符**、`README.md` 命中 **1**、三件资产名字与字节未变）。
+
