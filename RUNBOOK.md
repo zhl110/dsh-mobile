@@ -1997,7 +1997,7 @@ HTTPS 推仍会撞 `CRYPT_E_NO_REVOCATION_CHECK` ⇒ 照旧走**一次性 SSH UR
 **三、驱动他的 Edge 这一段：两次坐标被抢，我就停手了**
 
 Qoder 内置浏览器（`browser-use`）没有他的 GitHub 登录态 —— 打开设置页直接跳 `https://github.com/login?return_to=…`，所以那条路**不能替他点**。
-改用他的 Edge（已登录）：`msedge.exe "<URL>"` 在现有实例里开新标签（进程数 18 → 20 复点到），坐标点击走 `user32!SetCursorPos + mouse_event`（脚本 `downloads/click.ps1`，截图 `downloads/shot.ps1`）。
+改用他的 Edge（已登录）：`msedge.exe "<URL>"` 在现有实例里开新标签（进程数 18 → 20 复点到），坐标点击走 `user32!SetCursorPos + mouse_event`（脚本 `tools/win-click.ps1`，截图 `tools/win-shot.ps1`；**当场先落在 `downloads/` 那两张，随后把两份抄进 `tools/` 入库** —— `downloads/` 是忽略区，现役文档不能指着它）。
 **第一发点标签页成了**（`CURSOR_AFTER 600,30` 与请求值一致），**接着两发被抢**：请求 `617,437` 回 `461,282`、请求 `600,30` 回 `636,35` ⇒ **他手在鼠标上**。
 ⇒ 在**令牌设置页**上盲点是危险的（勾错一项就改错了权限），所以我停手，改成"每一步说给他点"。他随后自己走完了：`Edit` → `Administration` → `Access: Read and write` → `Save`。
 顺带纠正他一次走偏：他先打开的是 **Tokens (classic)** 那把（页顶红字 `This token expired on Fri, Aug 14 2026`），**不是 gh 在用的那把** —— gh 用的是 fine-grained 的 `ZHL110`（无过期日）。
