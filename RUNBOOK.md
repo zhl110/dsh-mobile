@@ -2021,3 +2021,9 @@ meta     …/download/…/payload-meta.txt                            => HTTP 20
 
 **五、这一轮的"没做什么"**：没删库、没改默认分支、没开分支保护、没动那把令牌的**其它**权限项、没重新生成令牌值、没碰 `agent-hub` 那条 SSH 与另两把凭据；**没验"从 GitHub 拉回来能不能解那个包"**（只验了匿名能取到头部 1024 B 与 meta 全文 —— 完整下载 901 MB 没跑）；`install-from-scratch.sh` 仍没在干净机上跑过；他的东西一个没碰、没 reboot、没装包、没重启引擎。
 **一条要留的后续**：公开之后 git 历史**永久可回看**（归档 RUNBOOK 里那些设备细节都在里面）；真要收回只能删库重建，改历史不算收回去。
+
+**六、提交与推送**（回填那一发自己的号不写，写了就自指）
+子仓 **`836b36a`**（完整 `836b36ae5585b9ff130f7f0be2a08e4edd309ef7`）= `AGENTS.md`/`PROGRESS.md`/`RUNBOOK.md`/`docs/INSTALL-from-scratch.md` 四件、**66 insertions / 2 deletions**；
+一次性 SSH URL 回声 `03135a7..836b36a  main -> main`（退出码 0），`git fetch <同一 SSH URL> main:refs/remotes/origin/main` 之后 `git rev-list --count HEAD` 与 `… origin/main` **都是 24**（HTTPS 那发照旧撞 `CRYPT_E_NO_REVOCATION_CHECK`，`remote.origin.url` 没动）。
+父仓 `D:/mycode` 同内容本地提交 **`554e767`**（完整 `554e7676a6e8c6db6d01cac0fa0d9a5c1297d3f1`；pathspec 带 `dsh-mobile/` 前缀，那仓没配 remote ⇒ 只在本地）。
+**一条从此可回看的事实**：库公开之后，这些提交的作者字段 `再来一杯海星酒 <1828980455@qq.com>` 对任何人可见 —— 先例复点见本节一（他另两个公开库用的就是同一个邮箱），所以这不是新泄，但**要收回只能删库重建，改历史不算**。
