@@ -211,7 +211,7 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
 | **对账手机侧那个 dsh 自己写了什么**（状态 35 那一轮的五发，纯只读） | `scripts/dsh-agent-write-audit-probe71.sh` → `downloads/p71.txt`（cordis 现状/两份备份/`--dump-config`/手工调 runner/我的三层 md5。⚠ 它 ② ⑥ 两节路径写错 ⇒ 空读数，**空读数不能读成结论**）；`scripts/dsh-confine-recheck-probe72.sh` → `p72.txt`（**修正版**：模块真实路径、`confine()` 直调、围内/围外 `/proc/1/root` 对照、dpkg、hosts 对账、会话清单）；`73`/`74`/`75` → 同一份会话记录三次提取（73 抓错字段、74 抓到工具名但命令为空、**75 才把 44 条命令串全提出来**） |
 | 在机上读一份会话记录（`session.v4.jsonl.zstd`） | 见 `scripts/dsh-session-calls-probe75.sh` 第 ① 节那段的形状：`zlib.zstdDecompressSync` 解帧 → 按行 JSON → 取 `type==="tool/call"` → **`JSON.parse(data.arguments)` 才是命令**（`data.arguments` 本身是字符串）。FRAMES/LINES/DECOMP_FAILS 三个数要互相对得上 |
 | 重打 APK | `bash app/build.sh`（版本号在 `AndroidManifest.xml` 与 `build.sh` 两处） |
-| **打 rootfs 产物并挂 Release**（GB 级，不入库） | 一条命令到底：`bash tools/make-payload.sh --publish`（本机自测 → 设备普查 → 取流 → gzip → 两道闸门 → 指纹/元数据 → 超档切卷 → `gh release create payload-<UTC>` → **读回资产**判成没成）。闸门自测**不需要手机**：`bash scripts/dsh-payload-pack.sh --selftest`（11-03 本机 合计 5 条 PASS 5）。不发布就去掉 `--publish`，只看不出包加 `--dry`。剥除清单的**单一真源是 `scripts/dsh-payload-pack.sh`** 的 `DROP`/`DSH_KEEP`；PC 侧那两支只做压缩、两道闸门、指纹。产物与 `payload-meta.txt` 落 `release-assets/`（已 gitignore）。**`/etc/shadow` 原件永不进包**，包里是 root 栏 `!` 的生成替代件，靠装机脚本 3b 放回 |
+| **打 rootfs 产物并挂 Release**（GB 级，不入库） | 一条命令到底：`bash tools/make-payload.sh --publish`（本机自测 → 设备普查 → **机上 `tar -czf` 落文件** → `adb pull` → **机上/PC 三方复点** → 两道闸门 → 指纹/元数据 → 超档切卷 → `gh release create payload-<UTC>` → **读回资产**判成没成）。闸门自测**不需要手机**：`bash scripts/dsh-payload-pack.sh --selftest`（11-03 本机 合计 5 条 PASS 5）。不发布就去掉 `--publish`，只看不出包加 `--dry`。剥除清单的**单一真源是 `scripts/dsh-payload-pack.sh`** 的 `DROP`/`DSH_KEEP`。**现役那一发的 tag 写在 `payload-meta.txt` 与 Release 上**，体积/sha256/条目数**本文件不抄第二份**（抄了就会有两边对不上的一天）。产物落 `release-assets/`（已 gitignore）。**`/etc/shadow` 原件永不进包**，包里是 root 栏 `!` 的生成替代件，靠装机脚本 3b 放回 |
 | **在别人机上装成即装即用** | `bash tools/install-from-scratch.sh`（取包→撞 sha→设备上以 root 解压→3b 放回 `/etc/shadow`→推四件→起入口→烤口令→装 APK）。**从未实机跑过**（现役那台机别跑，见脚本头部警告；真验证要第二台机）。给别人看的说明在 `docs/INSTALL-from-scratch.md` |
 | 重跑入口自测（**不需要手机**，Windows 侧就能跑） | `node scripts/dsh-entry.js --selftest`（2026-10-21 当场：`合计 58 条：PASS 58 / FAIL 0`；铁律 12） |
 | 换图标（切五档） | 先把满幅方图存成 `app/icon/icon-src.png`，再 `sh app/icon.sh`，最后重打 APK |
@@ -378,6 +378,15 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
    而这两样根本不会进包；清单要出自与 `tar --exclude` 同一批条件的那份列表。
    附带一条：闸门这类"只跑一次看不出对不对"的逻辑，做成一个**不需要外设就能跑的 `--selftest`**（埋雷要抓到 / 撤雷要 0 且当场取到过串 / 源为空要明说"取不到"），
    否则手机上掉线这段时间里你连"闸门是不是坏的"都无法判断。
+   **→ 11-03 真跑第一发，这条判据长出两半（旧话不删）**：① **名单闸门也要看"这路径归谁"** —— 它打出 55 命中，其中 **9 条是真阳性**
+   （`frida-17.24.3.dist-info/*`：`DROP` 只写了 `frida` / `frida_tools` 两个**目录名**，没盖住 dist-info ⇒ 宽成 `frida*`，条目 112,181→112,172），
+   另 **46 条是上游插件目录里的同名词**（他装的 `dsh-purge/lib,presets/redteam/*`，那是插件源码不是这台机的数据）。⇒ 现在分两批：**拦（本机写过的路径）/ 参考（只报数不拦）**，两条计数都印出来。
+   判据与"词形"那条同族：**名字不是所有权**。② `--selftest` 从 3 条长到 5 条后**真机第一次跑就全绿**，但它绿的是逻辑，**替代件是否真进包**要靠出包后那一条 `shadow 替代件在位 = 1（要 1）` 的复点。
+- **这台机的 adb 两个口都带不了大二进制流，产物必须"机上落文件 + `adb pull` + 两边各算一遍 sha"**（11-03 那三发白花在这一条上，读数 RUNBOOK 14.40 二）：
+  `adb exec-out` 在这台机上返回的 fd 是 **`/dev/pts/0`** ⇒ `tar -cf -` 报"输出是终端"，PC 侧收到 **427 B 而退出码 0**；`adb shell` 那条 socket 是**小样过大样翻车**
+  （64 KiB 全 `\n` 逐字节撞上 ⇒ 我据此误判"能过"；换成 120 MB 真流，PC 侧**多 614,713 B 且 md5 不对**）。
+  ⇒ 凡是 GB 级产物：**在设备上写成文件**（`tar -czf`）**再 `adb pull`**，并且**机上自报的字节数/sha256/条目数**要与 PC 拉回后重算的那三份逐字节撞上（`make-payload.sh` 第 3 步就是这么写的）；
+  撞不上就停，别把"退出码 0 + 字节数对"当链路可信。**附带一条**：`du -sbx /` 里的 `-x` **拦不住 bind 进来的 `/phone`**（与 rootfs 同一个 `st_dev`）⇒ "整树"能读出 375 GB 那种假数，口径要写 `--exclude=/phone`。
 - **`grep -F` 和 `.{0,60}` 不能同时用**（p83 那发）：加了 `-F`，`.` 与 `{0,60}` 全成字面量 ⇒ 五个文件的"原文窗口"齐刷刷空，看着像"页面里没有这段代码"。空窗口先怀疑自己的正则，别下结论。
 - **往 chroot 里塞"一条命令"有两种静默失败，11-02 这一轮各撞一次**（都是白花一轮 adb 的那种）：
   ① **PATH**：`chroot $ROOT /bin/sh -c "tar …"` 继承的是 **Android 那套 PATH**，里面没有 `/usr/bin` ⇒ 报 `tar: not found`、`head: not found`，

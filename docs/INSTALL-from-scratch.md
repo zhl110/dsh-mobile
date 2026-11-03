@@ -49,6 +49,11 @@ bash tools/install-from-scratch.sh --verify        # 只复点现场，一个字
 （只有这样才能保住属主与 setuid）→ **3b 放回 `/etc/shadow` 那份替代件并复点三个数** → 建挂载点目录 → `tools/deploy-entry.sh` 推那四件 → 起入口（第一次会造口令）→
 把口令拉回 PC 烤进 APK → `tools/install-apk.sh` 只装机不重打 → 跑一遍 `dsh-entry-check.sh` 体检。
 
+**取包这一跳现在有个前提**：产物挂在 `zhl110/dsh-mobile` 的 Release 上（tag 只写在 `release-assets/payload-meta.txt` 与 Release 那两件里，本页不抄第二份），
+而**这个库目前是 PRIVATE** ⇒ 没被加进协作者的人 `gh release download` 取不到资产。给别人装的先决条件是**把他 invite 进来**或**把库转公开**（那是作者的决定，我没动）。
+拿不到 Release 的人有第二条路：把那三件 `tar.gz` + `SHA256SUMS` + `payload-meta.txt` 直接交给对方，
+`bash tools/install-from-scratch.sh <本地路径>` 走本地包 —— 撞 sha256 那条判据与流程完全一样，只是少了一次下载。
+
 **这一页的验证状态要如实说**：整条流程（含 3b）**至今没在一台干净机上跑完过一次** —— 作者手上只有那台现役机，
 而它第 3 步"目录非空就停"本来就该拦住，不能拿它自测。脚本逐支 `bash -n` 过、两道泄露闸门有本机自测
 （`bash scripts/dsh-payload-pack.sh --selftest`，不依赖手机），但**"装完能用"这一格目前只有设计证据，没有实测读数**。

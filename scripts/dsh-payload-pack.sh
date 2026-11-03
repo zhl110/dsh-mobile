@@ -13,7 +13,10 @@
 # 用法（前两种由 PC 侧 tools/make-payload.sh 调用，别手搓 adb）：
 #   bash /root/dsh-payload-pack.sh --census  只读：清单、保留体积、留/剥了什么、敏感文件名、词形命中（参考）、
 #                                            已知凭证串回归（闸门一）。值一律不打印，只报文件名与个数 —— 铁律 8
-#   bash /root/dsh-payload-pack.sh --pack    把保留集以 tar 流写到 stdout，诊断一律走 stderr
+#   bash /root/dsh-payload-pack.sh --pack /tmp/xxx.tar.gz
+#                                            把保留集 tar -czf 到**设备上那个路径**（/tmp 在 DROP 里，不会自吞）。
+#                                            不走 stdout：这台机 adbd 带不了二进制流（2026-11-03 实测，见 PC 侧第 2 步注释）。
+#                                            诊断与产物的 字节/sha256/条目数 一律走 stderr，PC 侧拉回后逐字节撞。
 #   bash /root/dsh-payload-pack.sh --meta    只给 payload-meta.txt 的那几个数
 #   bash /root/dsh-payload-pack.sh --selftest  造一棵假树把闸门与 shadow 替代件跑五遍：埋雷要抓到 / 撤雷要 0 且当场取到过串 /
 #                                            凭证源空要报"取不到串" / root 栏要锁掉且原哈希不残留 / 原件读不到要报错不产空件。
@@ -21,6 +24,7 @@
 set -u
 
 MODE=${1:---census}
+OUT_ARG=${2:-}          # --pack 的输出路径（设备上可见的那个文件系统）
 # /root/.dsh 下**只留**这三个：语音模型（离线能用）、profile 层栈（dsh 本体配置）、purge 的备份目录。
 DSH_KEEP='speech-to-text profiles dsh-purge'
 
@@ -29,14 +33,17 @@ DROP=(
   /tmp /proc /sys /dev /run
   /root/.npm /root/.cache /root/.local /root/.ssh /root/.bash_history /root/.dsh-env /root/.config
   /var/cache/apt /var/lib/apt/lists
-  /usr/local/lib/python3.12/dist-packages/frida
-  /usr/local/lib/python3.12/dist-packages/frida_tools
+  /usr/local/lib/python3.12/dist-packages/frida*
   /usr/local/bin/frida /usr/local/bin/frida-server /usr/local/bin/frida-inject
   /root/dsh-payload-pack.sh
   /etc/shadow
 )
+# frida 那条 11-03 从 `dist-packages/frida` 改成 `frida*`：闸门二在真产物里抓到 9 条 `frida-17.24.3.dist-info/*`
+#   （pip 装的元数据残件，正文目录早被排掉了，只有这份"装过什么"的说明书跟着走了）—— 名单闸门这一次不是误报。
 # /etc/shadow 为什么"整份不发、改发一份生成的替代件"（11-03，他一句"先不验证，直接提交"）：
 #   里面有 root 的口令哈希（本机读数还没拿到，但不能赌它是锁定的），GB 级产物一旦公开就是离线爆破的靶子。
+#   → 11-03 当晚普查读到了：**root 栏 = 锁定/无哈希**，shadow 474 B / 18 行（RUNBOOK 14.40 一）。
+#     做法不改——原件仍不发：这条默认不依赖那条读数，下次换成有哈希也不用再改一遍脚本。
 #   要在同一个成员名上换内容，得让 tar 落一次 2.9 GB 的中间件再 --delete/--append —— 不值。
 #   所以：原件不进包，包里放一份 root 栏改成 ! 的替代件（属主与权限当场设好），由装机脚本放回 /etc/shadow。
 #   代价说清楚：只按本包解压、不走 install-from-scratch.sh 的人，拿到的 rootfs 没有 /etc/shadow。
@@ -70,7 +77,14 @@ for f in /root/.dsh/* /root/.dsh/.[!.]*; do
 done
 for n in '*session.v4.jsonl.zstd' '*entry.key' '*.pid'; do EXCL+=( "--exclude=./$n" ); done
 
-tar_stream() { tar -C / -cf - "${EXCL[@]}" .; }
+# 产物落在设备上，再由 PC 侧 adb pull 拉回（tar 的字节流不能过这台机的 adbd）。
+# GZIP=-1 默认：整包量级 2.6 GB，-6 实测 99 秒只对 /usr 那 2.4 GB（downloads/p89.txt），整树要到 ~110 秒；
+# -1 与 -6 的体积差实测约 3%（p89 那一发比 3.05），产物挂 Release 走带宽不走 CPU，取 -1。
+GZIP=${GZIP:--1}
+tar_to_file() {
+  [ -n "$OUT_ARG" ] || { echo "[pack] 没给输出路径 ⇒ 不打包（产物必须落设备上的文件，stdout 过不了 adb）" >&2; return 2; }
+  tar -C / -czf "$OUT_ARG" "${EXCL[@]}" .
+}
 kept_du()    { du -sbx "${DUEXC[@]}" / 2>/dev/null | cut -f1; }
 find_kept()  { find / \( "${PRUNE[@]}" -false \) -prune -o -type f -print 2>/dev/null; }
 
@@ -208,10 +222,17 @@ selftest() {
 if [ "$MODE" = "--selftest" ]; then selftest; exit $?; fi
 
 if [ "$MODE" = "--pack" ]; then
-  echo "[pack] exclude ${#EXCL[@]} 条；条目数由 PC 侧从同一条流数，这里不另数" >&2
+  echo "[pack] exclude ${#EXCL[@]} 条；产物落 $OUT_ARG（不走 stdout）" >&2
   stage_shadow || echo "[pack] !! 替代件没做成 —— 包里将没有 /etc/shadow（原件本来就不发），装机那步会报回来" >&2
-  tar_stream; rc=$?
+  tar_to_file; rc=$?
   rm -rf "$SHADOW_STAGE"
+  if [ "$rc" = 0 ] && [ -n "$OUT_ARG" ]; then
+    # 这三个数是 PC 侧的对账基准：拉回后字节数、sha256、条目数必须各自撞上
+    printf '[pack] gz %s B / sha256 %s / 条目 %s\n' \
+      "$(wc -c < "$OUT_ARG" | tr -dc '0-9')" \
+      "$(sha256sum "$OUT_ARG" | cut -d' ' -f1)" \
+      "$(tar -tzf "$OUT_ARG" 2>/dev/null | wc -l | tr -dc '0-9')" >&2
+  fi
   echo "[pack] tar rc=$rc；替代件目录已删（$(ls -d "$SHADOW_STAGE" 2>&1 | head -1)）" >&2
   exit $rc
 fi
@@ -227,7 +248,7 @@ if [ "$MODE" = "--meta" ]; then
 fi
 
 echo "== 0 现场（UTC $(date -u '+%F %T')，$(tar --version | head -1)）"
-echo "  整树（含 /tmp 与缓存，p89 口径）: $(du -sbx / 2>/dev/null | cut -f1) B"
+echo "  整树（含 /tmp 与缓存；**排掉 /phone** —— 它与 rootfs 同一个 st_dev，-x 拦不住 bind 进来的用户存储，11-03 不排时读出 375,700,841,604 B 那种假数）: $(du -sbx --exclude=/phone / 2>/dev/null | cut -f1) B"
 echo "  保留体积（tar 用的同一批清单）  : $(kept_du) B"
 echo "  --exclude 条数 ${#EXCL[@]} / -prune 条件 $(( ${#PRUNE[@]} / 3 ))"
 
