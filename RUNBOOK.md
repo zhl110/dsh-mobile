@@ -2027,3 +2027,7 @@ meta     …/download/…/payload-meta.txt                            => HTTP 20
 一次性 SSH URL 回声 `03135a7..836b36a  main -> main`（退出码 0），`git fetch <同一 SSH URL> main:refs/remotes/origin/main` 之后 `git rev-list --count HEAD` 与 `… origin/main` **都是 24**（HTTPS 那发照旧撞 `CRYPT_E_NO_REVOCATION_CHECK`，`remote.origin.url` 没动）。
 父仓 `D:/mycode` 同内容本地提交 **`554e767`**（完整 `554e7676a6e8c6db6d01cac0fa0d9a5c1297d3f1`；pathspec 带 `dsh-mobile/` 前缀，那仓没配 remote ⇒ 只在本地）。
 **一条从此可回看的事实**：库公开之后，这些提交的作者字段 `再来一杯海星酒 <1828980455@qq.com>` 对任何人可见 —— 先例复点见本节一（他另两个公开库用的就是同一个邮箱），所以这不是新泄，但**要收回只能删库重建，改历史不算**。
+
+**六·补（同一轮收尾，北京 22:0x 当场重读，不是抄上一发）**：上一发文档指着忽略区的 `downloads/click.ps1` / `downloads/shot.ps1` —— 现役文档不能指着别人拉不到的文件 ⇒ 两支抄进跟踪区 `tools/win-click.ps1`（**1,126 B**）与 `tools/win-shot.ps1`（**466 B**），CR 逐支 `tr -dc '\r' | wc -c` 复点 = **0**，引用两处（AGENTS 已知坑一条、本节三）就地改口。
+子仓那一发 `fd93ac8`：**4 files changed, 38 insertions(+), 2 deletions(-)**，一次性 SSH URL 回声 `2484d7f..fd93ac8  main -> main`；父仓同内容本地提交 `f101dc1`（那仓 `git log` 顶部三发 = `f101dc1` / `f411a0b` / `554e767`，仍无 remote ⇒ 只落本地）。
+报告发出前重撞的四个数：`gh repo view --json visibility` 回 **`PUBLIC`**；`git rev-list --count HEAD` 与 `… origin/main` **都是 26**、`origin/main..HEAD` = **0**；匿名 Range `0-1023` 打那件 901 MB ⇒ **HTTP 206 / 1024 B / 头四字节 `1f 8b 08 00`**；匿名取 `payload-meta.txt` ⇒ **HTTP 200 / 1,611 B / sha256 前缀 `fbcf1da545ce`**（测试件 `downloads/anon-recheck.bin` 打完即删，`anon-meta-recheck.txt` 留着当这一节的出处）。
