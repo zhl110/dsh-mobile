@@ -1810,3 +1810,58 @@ $ bash scripts/dsh-payload-pack.sh --selftest
 **手机端一次都没跑过**）；`/usr` 那 1 GB 多上游 js 没扫；
 **`/etc/shadow` 里 root 到底有没有哈希这个数今晚拿不到**（要在机上跑第 4 节才知道）—— 若"有哈希"，那**不能随包走**，这是出包前还要动的一格；
 他的东西一个没碰（`/data/local/tmp` 那批、cordis、锁屏、自启、purge），没 reboot、没装包、没重启引擎、没改 git 配置。
+
+### 14.39 他一句"先不验证，直接提交"：把两处"要人看一眼"的关口改成**默认就安全**，出包与挂 Release 接成一条命令（2026-11-03，北京凌晨，手机仍不在）
+
+**一、这句话我按哪个意思做的**（写清楚，免得下一个人读成"把闸门拆了"）
+
+拆掉的是**需要他在场才能判的两格**，不是自动判据：
+① `/etc/shadow` 里 root 有没有哈希 —— 原来我打算"等手机上来看一眼，有哈希就先跟他说再动"；
+② 打包与发布之间那一步人工确认。
+**两道泄露闸门一条没松**（它们不需要人，跑不过就不出包），而且现在**多了一条**（见第二节）。
+"不验证"落到实物上的部分是：`install-from-scratch.sh` 仍没实机跑过这件事，**我不再把它当发布的前提**，改为在文档与 `payload-meta.txt` 里明写"未经干净机验证"。
+
+**二、`/etc/shadow`：原件不进包，包里发一份生成的替代件**
+
+`scripts/dsh-payload-pack.sh` 的 `DROP` 加了 `/etc/shadow`，同时 `--pack` 时用 `stage_shadow()` 现造一份
+**root 栏改成 `!`、其余行原样保留**的文本，落在 `./root/payload-stage/etc/shadow`（`chmod 640`、`chgrp shadow`），
+装机脚本新增 **3b** 那步把它放回 `$ROOT/etc/shadow` 并复点三个数（root 首字符 / 行数与替代件相等 / 落点存在）。
+为什么不"在同一个成员名上换内容"：那要让 tar 在机上落一次 ~2.9 GB 中间件再 `--delete` + `--append`，多两遍全量 I/O；
+换路径 + 装机放回只要一行 `cp`。**代价写明白**：只解压、不走装机脚本的人拿到的 rootfs 没有 `/etc/shadow`（不影响 chroot 起来，我们全程是 Android 侧 root 进的；但 `passwd`/`su` 那套口令登录不可用）。
+两条护栏（都在 `--selftest` 里）：**行数不撞就删掉替代件不随包走**；**原件读不到时退码非 0 且不产出空件**（空文件放回 `/etc/shadow` 会抹掉整棵树的身份信息，那是更坏的形状）。
+名单闸门（闸门二）的 pattern 也加了 `^\./etc/shadow$` —— 锚死整行，否则会把替代件 `./root/payload-stage/etc/shadow` 一起误伤。
+
+**三、`--publish`：出包完直接挂 Release**
+
+`bash tools/make-payload.sh --publish` 现在一次走完：本机自测 → 设备侧普查 → 取流 → gzip → 两道闸门 → `SHA256SUMS`/`payload-meta.txt` → 超档切卷 → `gh release create payload-<UTC>`。
+**判"发布成没成"只认读回来的资产**（`gh release view --json tagName,assets`，把每件的名字/字节/sha256 摘要打出来），不认 `gh` 的退出码 ——
+这条按仓里的老规矩办（铁律 2/3）。切卷时**只传卷**，不重复传原件。
+
+**四、这一改顺手抓出两个真 bug（都是"现在就能验"的那类，不依赖手机）**
+
+1. `gh -q` 那串表达式我第一版写的是 `(|.assets|length|tostring)` —— **`gh` 直接报 `failed to parse jq expression … unexpected token "|"`**，
+   而 `view` 的退出码还是 0（管道尾巴是 `tr` 的码，我的 ad-hoc 命令就是这么被骗过去的）。正确写法 `(.assets|length|tostring)`。
+   ⇒ 复点用 canary 那发跑通：`tag=expr-canary 资产 2 件：canA.txt=9B sha256:0a06d085…, canB.txt=9B sha256:e804be72…`，退出码 0；canary 已删，`releases` 长度复点 **0**。
+2. 脚本里 `--notes` 那串原本用 `"…\` + 换行` 续行（**同一条老坑的第 3 次出现**），已改成多段 `NOTES="${NOTES}…"` 拼接，不留反斜杠。
+   `gh` 调用原先接在管道后面取 `$?` 也一起改掉：先 `CRE_OUT=$(…)` 取码，再打印。
+
+**五、`--selftest` 现在是 5 条，本机当场全绿**
+
+```
+$ bash scripts/dsh-payload-pack.sh --selftest
+  A 埋一发进保留集 ⇒ 命中 1 : PASS
+  B 撤掉埋的 ⇒ 命中 0（当场取到 3 个串）: PASS
+  C 凭证源为空 ⇒ 报"取不到串"而不是 0 : PASS
+  D shadow 替代件：root 锁掉 / 别的行在 / 原哈希不残留 : PASS
+  E 原件读不到 ⇒ 退码非 0 且不产出空件 : PASS
+  合计 5 条：PASS 5 / FAIL 0        rc=0
+```
+`make-payload.sh` 出包前先跑它，并把它的"合计"行**原样写进 `payload-meta.txt`**（不在文档里抄第二份，铁律 12）。
+三份脚本 `bash -n` 都过、CR 都是 0（`dsh-payload-pack.sh` / `make-payload.sh` / `install-from-scratch.sh`）。
+
+**六、手机这一格仍未解**：`adb devices` 现在**连 `offline` 那行都不回了**（空列表），Windows 侧 `VID_22D9` 三条仍 `OK` ⇒ 还是手机侧要重插/重授。
+**所以今晚仍然没有包、没有 Release**（canary 那两发都当场删干净了）。
+
+**七、我这轮没做什么**：没打成包、没建 Release（`releases` 长度 0）；`install-from-scratch.sh` 的 3b 那步**一行都没实机跑过**（新增，本机连不通 adb）；
+新加的 `--publish` **只验到 `gh` 的表达式与建/删/读回资产**，真 GB 级资产上传没跑；`/usr` 那 1 GB 多没扫；
+`/etc/shadow` 原件里 root 到底是不是哈希**仍然没读数**（现在这条不再是前提：不管是哪种，包里都不发原件）；他的东西一个没碰；没 reboot、没装包、没重启引擎、没改 git 配置。

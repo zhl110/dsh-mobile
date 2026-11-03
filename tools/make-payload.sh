@@ -20,6 +20,7 @@
 #   bash tools/make-payload.sh --dry        只读普查：清单/保留体积/留剥什么/敏感名/凭证命中；不出包
 #   bash tools/make-payload.sh              出包到 release-assets/（超过 MAX_MB 自动 split 成多卷）
 #   bash tools/make-payload.sh --pack --keep-raw   出包并留 raw tar（默认算完 sha 就删）
+#   bash tools/make-payload.sh --publish      出完直接挂 Release（tag = payload-<UTC>，读回资产才算成）
 set -u
 export MSYS2_ARG_CONV_EXCL='*'
 
@@ -36,6 +37,7 @@ OUTDIR=release-assets
 MAX_MB=1900
 MODE=${1:---dry}
 KEEPROW=$([ "${2:-}" = "--keep-raw" ] && echo 1 || echo 0)
+PUB=0; case " $* " in *" --publish "*) PUB=1;; esac
 
 # 引号形状照 tools/run-probe.sh:45：外层双引号给 adb、转义双引号给 su -c —— 这样命令串里可以出现单引号
 S() { "$ADB" shell "su -c \"$1\"" </dev/null 2>&1 | tr -d '\r'; }
@@ -45,8 +47,11 @@ CHRUN() { "$ADB" shell "su -c \"$RUNNER --run 'bash /root/$DEVNAME $1'\"" </dev/
 bash -n "$SCRIPT" || { echo "!! $SCRIPT 语法不过"; exit 1; }
 CR=$(tr -cd '\r' < "$SCRIPT" | wc -c); [ "$CR" = "0" ] || { echo "!! $SCRIPT 有 $CR 个 CR，先 dos2unix"; exit 1; }
 if [ "$MODE" != "--dry" ]; then
-  echo "== -1 先在本机把闸门自测一遍（同一份脚本，三种形状：埋雷要抓到 / 撤雷要 0 / 凭证源空要报"取不到串"）"
-  bash "$SCRIPT" --selftest || { echo "!! 闸门自测不过 —— 闸门本身坏了，这时候的"0 命中"不作数，不出包"; exit 1; }
+  echo "== -1 先在本机把闸门自测一遍（同一份脚本，五种形状：埋雷要抓到 / 撤雷要 0 且当场取到过串 / 凭证源空要报"取不到串" / shadow 替代件要锁掉 root 且不残留原哈希 / 原件读不到要报错而不是产空件）"
+  ST_OUT=$(bash "$SCRIPT" --selftest 2>&1)
+  [ "$?" = 0 ] || { printf '%s\n' "$ST_OUT" | sed 's/^/  /'; echo "!! 闸门自测不过 —— 闸门本身坏了，这时候的"0 命中"不作数，不出包"; exit 1; }
+  ST_SUM=$(printf '%s\n' "$ST_OUT" | grep '合计' | tail -1)
+  echo "  ${ST_SUM:-没读到自测合计行}"
 fi
 "$ADB" get-state >/dev/null 2>&1 || { echo "!! 设备不在 device 状态"; exit 1; }
 
@@ -103,11 +108,14 @@ ENT_GZ=$(tar -tzf "$OUT" 2>/dev/null | wc -l | tr -dc '0-9')
 [ "$ENT_RAW" = "$ENT_GZ" ] && echo "  [ok] gz 与 raw 条目数相等：$ENT_GZ" || { echo "!! 条目不等 raw=$ENT_RAW gz=$ENT_GZ"; exit 1; }
 
 echo "== 4 名单闸门（闸门二：敏感名命中就停）"
-RE='entry\.key|session\.v4|/\.dsh-env|bash_history|/\.ssh/|^\./phone/|/\.npm/|apt/archives|/redteam/|/attachments/|/llm-deepseek/|frida|/\.dsh/logs/|/\.dsh/storages/|/\.dsh/cache/'
+# ^\./etc/shadow$ 是 11-03 加的：原件带 root 口令哈希，一律不进包（包里改发一份 root 锁掉的替代件，
+# 落在 ./root/payload-stage/etc/shadow —— 那条名字**不该**被这条 pattern 抓到，所以必须锚死整行）。
+RE='entry\.key|session\.v4|/\.dsh-env|bash_history|/\.ssh/|^\./phone/|/\.npm/|apt/archives|/redteam/|/attachments/|/llm-deepseek/|frida|/\.dsh/logs/|/\.dsh/storages/|/\.dsh/cache/|^\./etc/shadow$'
 BAD=$(tar -tzf "$OUT" | grep -cE "$RE")
 echo "  命中 : $BAD 条（要 0）"
 [ "$BAD" = "0" ] || { tar -tzf "$OUT" | grep -E "$RE" | head -12 | sed 's/^/    /'; echo "!! 闸门不过：$OUT 别推，删掉重打"; exit 1; }
-echo "  [ok] 名单干净；条目数 $ENT_GZ"
+ALT=$(tar -tzf "$OUT" | grep -c '^./root/payload-stage/etc/shadow$')
+echo "  [ok] 名单干净；条目数 $ENT_GZ；shadow 替代件在位 = $ALT（要 1；0 ⇒ 装机那步会缺 /etc/shadow，见 install-from-scratch 3b）"
 
 echo "== 5 指纹与元数据"
 SHA=$(sha256sum "$OUT" | cut -d' ' -f1)
@@ -127,10 +135,11 @@ META=$OUTDIR/payload-meta.txt
   echo "dpkg ii 数    : $(mget dpkg_ii)"
   echo "cordis 字节   : $(mget cordis)"
   echo "hosts 钉的行  : $(mget hosts)"
-  echo "闸门            : 本机自测 3/3 通过；出包前已知凭证串回归 $N 命中；出包后名单闸门 0 命中"
+  echo "闸门            : 本机自测 ${ST_SUM:-没读到}；出包前已知凭证串回归 $N 命中；出包后名单闸门 0 命中"
   echo "剥除清单      : 见 scripts/dsh-payload-pack.sh 的 DROP / DSH_KEEP（单一真源，本文件不抄第二份）"
   echo "保留 /root/.dsh: speech-to-text（离线模型）、profiles（层栈）、dsh-purge（备份目录）"
-  echo "明确不含      : entry.key、/root/.dsh-env 与它的备份、任何 provider 的 API key、会话/附件/storages/日志、缓存、/tmp、/phone、frida"
+  echo "明确不含      : entry.key、/root/.dsh-env 与它的备份、任何 provider 的 API key、会话/附件/storages/日志、缓存、/tmp、/phone、frida、/etc/shadow 原件（不管 root 那栏是不是哈希都不发；包里发的是 root 锁掉的替代件，装机脚本 3b 放回）"
+  echo "装机验证状态  : tools/install-from-scratch.sh（含 3b）**未在干净机上实机跑过** —— 本包只验到两道闸门与本机自测，'装完能用'目前只有设计证据、没有实测读数"
 } > "$META"
 sed 's/^/  /' "$META"
 [ "$KEEPROW" = "1" ] && echo "  [keep-raw] raw 留在 $RAW" || rm -f "$RAW"
@@ -145,3 +154,33 @@ fi
 S "rm -f $ROOT/root/$DEVNAME" >/dev/null
 echo "  设备侧脚本副本已删：$(S "ls -1 $ROOT/root/$DEVNAME 2>&1" | head -1)"
 echo "[done] $OUT"
+
+# --publish = 出包完直接挂 Release（他 11-03 那句"先不验证，直接提交"）。
+# 传哪几件：超档切卷时**只传卷**（原件不重复传一遍 GB），加 SHA256SUMS 与 payload-meta.txt。
+if [ "$PUB" = 1 ]; then
+  command -v gh >/dev/null || { echo "!! 要 gh（本机路径：C:\\Users\\周海龙\\AppData\\Local\\Microsoft\\WinGet\\Links\\gh.exe）"; exit 1; }
+  TAG=payload-$TS
+  ASSETS=("$OUTDIR/SHA256SUMS" "$META")
+  if ls "$OUT"-part-* >/dev/null 2>&1; then
+    while IFS= read -r f; do ASSETS+=("$f"); done < <(ls -1 "$OUT"-part-*)
+  else
+    ASSETS=("$OUT" "${ASSETS[@]}")
+  fi
+  echo "== 7 挂 Release : tag $TAG，资产 ${#ASSETS[@]} 件"
+  printf '    %s\n' "${ASSETS[@]}"
+  NOTES="Ubuntu 24.04 arm64 chroot + Node + dsh 0.2.1-rc.2 的整棵运行时，供 tools/install-from-scratch.sh 一键装。"
+  NOTES="${NOTES}仓里没有这些大件是格式问题不是配额问题（git 存不了属主与 setuid 位）。"
+  NOTES="${NOTES}包内不含：入口口令、provider 的 API key、会话与日志、缓存、/tmp、/phone、frida、/etc/shadow 原件。"
+  NOTES="${NOTES}装完第一件事是在网页里填你自己的 key。读数与清单见随包的 payload-meta.txt，做法见 docs/INSTALL-from-scratch.md。"
+  NOTES="${NOTES}如实说：install-from-scratch.sh 这条安装流程未在干净机上实机跑过（作者手上只有那台现役机），'装完能用'目前只有设计证据、没有实测读数；包里两道泄露闸门有本机自测兜住。"
+  CRE_OUT=$(MSYS2_ARG_CONV_EXCL='*' gh release create "$TAG" --repo zhl110/dsh-mobile \
+    --title "dsh-mobile rootfs payload $TS" --notes "$NOTES" "${ASSETS[@]}" 2>&1); RCP=$?
+  printf '%s\n' "$CRE_OUT" | tr -d '\r' | sed 's/^/  /'
+  echo "  create 退出码 : $RCP"
+  VIEW_OUT=$(MSYS2_ARG_CONV_EXCL='*' gh release view "$TAG" --repo zhl110/dsh-mobile --json tagName,assets \
+    -q '"tag=" + .tagName + " 资产 " + (.assets|length|tostring) + " 件：" + ([.assets[]|(.name + "=" + (.size|tostring) + "B " + (.digest // "无摘要"))]|join(", "))' 2>&1); VIEWRC=$?
+  echo "  复点（只认读回来的资产，不认退出码）:"
+  printf '%s\n' "$VIEW_OUT" | tr -d '\r' | sed 's/^/    /'
+  [ "$RCP" = 0 ] && [ "$VIEWRC" = 0 ] || { echo "!! 上面两发有一发没成 ⇒ 别当成已发布（退出码：create=$RCP view=$VIEWRC）"; exit 1; }
+  echo "  [ok] Release 已挂上：https://github.com/zhl110/dsh-mobile/releases/tag/$TAG"
+fi

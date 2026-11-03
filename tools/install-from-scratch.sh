@@ -103,6 +103,15 @@ echo "  关键件 : $(S "ls -l $ROOT/usr/local/bin/node $ROOT/usr/local/lib/node
 echo "  属主抽样（这两发必须有 0:0 与 setuid 位）:"
 S "ls -l -n $ROOT/usr/bin/passwd $ROOT/usr/bin/su" | sed 's/^/    /'
 
+echo "== 3b /etc/shadow 放回（包里**不发原件**，发的是一 root 栏已锁的替代件 —— 见 scripts/dsh-payload-pack.sh 那条注释）"
+SH_SRC=$ROOT/root/payload-stage/etc/shadow
+S "test -f $SH_SRC && cp $SH_SRC $ROOT/etc/shadow && chmod 640 $ROOT/etc/shadow && chgrp shadow $ROOT/etc/shadow 2>/dev/null; echo put_rc=\$?"
+echo "  落点 : $(S "ls -l -n $ROOT/etc/shadow 2>&1 | head -1")"
+echo "  root 栏 : $(S "awk -F: -v u=root '\$1==u{print substr(\$2,1,1)}' $ROOT/etc/shadow 2>/dev/null")（要是 ! 或 *，不能是 \$）"
+echo "  行数 : $(S "wc -l < $ROOT/etc/shadow 2>/dev/null | tr -dc '0-9'") / 替代件 $(S "wc -l < $SH_SRC 2>/dev/null | tr -dc '0-9'")（要相等）"
+[ "$(S "awk -F: -v u=root '\$1==u{print substr(\$2,1,1)}' $ROOT/etc/shadow 2>/dev/null")" = "!" ] \
+  || echo "  !! 这一格没落上（原件本来就不在包里）⇒ 这棵 rootfs 没有 /etc/shadow。不影响 chroot 起来（我们全程是 Android 侧 root 进的），但 passwd/su 那套口令登录不可用。"
+
 echo "== 4 挂载点与 tmp 权限（runner 要目录先存在：scripts/dsh-chroot.sh:89-98）"
 S "mkdir -p $ROOT/proc $ROOT/sys $ROOT/dev $ROOT/dev/shm $ROOT/run $ROOT/tmp; chmod 1777 $ROOT/tmp $ROOT/run; echo rc=\$?"
 S "ls -ld $ROOT/proc $ROOT/sys $ROOT/dev $ROOT/run $ROOT/tmp" | sed 's/^/  /'

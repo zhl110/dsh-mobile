@@ -15,8 +15,9 @@
 #                                            已知凭证串回归（闸门一）。值一律不打印，只报文件名与个数 —— 铁律 8
 #   bash /root/dsh-payload-pack.sh --pack    把保留集以 tar 流写到 stdout，诊断一律走 stderr
 #   bash /root/dsh-payload-pack.sh --meta    只给 payload-meta.txt 的那几个数
-#   bash /root/dsh-payload-pack.sh --selftest  造一棵假树把闸门跑三遍（埋雷要抓到 / 撤雷要 0 / 凭证源空要报"取不到串"）。
-#                                            不需要手机，Windows 的 git-bash 就能跑：2026-11-02 当场 合计 3 条 PASS 3 / FAIL 0
+#   bash /root/dsh-payload-pack.sh --selftest  造一棵假树把闸门与 shadow 替代件跑五遍：埋雷要抓到 / 撤雷要 0 且当场取到过串 /
+#                                            凭证源空要报"取不到串" / root 栏要锁掉且原哈希不残留 / 原件读不到要报错不产空件。
+#                                            不需要手机，Windows 的 git-bash 就能跑：2026-11-03 当场 合计 5 条 PASS 5 / FAIL 0
 set -u
 
 MODE=${1:---census}
@@ -32,7 +33,14 @@ DROP=(
   /usr/local/lib/python3.12/dist-packages/frida_tools
   /usr/local/bin/frida /usr/local/bin/frida-server /usr/local/bin/frida-inject
   /root/dsh-payload-pack.sh
+  /etc/shadow
 )
+# /etc/shadow 为什么"整份不发、改发一份生成的替代件"（11-03，他一句"先不验证，直接提交"）：
+#   里面有 root 的口令哈希（本机读数还没拿到，但不能赌它是锁定的），GB 级产物一旦公开就是离线爆破的靶子。
+#   要在同一个成员名上换内容，得让 tar 落一次 2.9 GB 的中间件再 --delete/--append —— 不值。
+#   所以：原件不进包，包里放一份 root 栏改成 ! 的替代件（属主与权限当场设好），由装机脚本放回 /etc/shadow。
+#   代价说清楚：只按本包解压、不走 install-from-scratch.sh 的人，拿到的 rootfs 没有 /etc/shadow。
+SHADOW_STAGE=${DSH_T_STAGE:-/root/payload-stage}
 MOUNTPTS=(/proc /sys /dev /run /tmp)
 NAMEPAT='\.key$|\.pem$|\.p12$|\.pfx$|id_rsa|credential|token|secret|\.dsh-env|bash_history'
 CENPATS=(apiKey api_key access_token 'Bearer ' 'sk-' password secret refresh_token client_secret)
@@ -65,6 +73,25 @@ for n in '*session.v4.jsonl.zstd' '*entry.key' '*.pid'; do EXCL+=( "--exclude=./
 tar_stream() { tar -C / -cf - "${EXCL[@]}" .; }
 kept_du()    { du -sbx "${DUEXC[@]}" / 2>/dev/null | cut -f1; }
 find_kept()  { find / \( "${PRUNE[@]}" -false \) -prune -o -type f -print 2>/dev/null; }
+
+# 造那份"root 栏已锁"的 /etc/shadow 替代件。只在 --pack 里调用 —— census 是只读的，不在盘上落东西。
+# 行数必须与原件相等，否则宁可不发（空文件放回 /etc/shadow 会把整棵树的身份信息抹掉）。
+stage_shadow() {
+  [ -r "$SHADOWF" ] || { echo "[shadow] 读不到 $SHADOWF ⇒ 不造替代件" >&2; return 1; }
+  mkdir -p "$SHADOW_STAGE/etc" || { echo "[shadow] 建 $SHADOW_STAGE 失败" >&2; return 1; }
+  awk -F: 'BEGIN{OFS=":"} $1=="root"{$2="!"} {print}' "$SHADOWF" > "$SHADOW_STAGE/etc/shadow" || { echo "[shadow] 生成失败" >&2; return 1; }
+  local sl=$SHADOWF tl="$SHADOW_STAGE/etc/shadow"
+  local SN TN
+  SN=$(wc -l < "$sl" | tr -dc '0-9'); TN=$(wc -l < "$tl" | tr -dc '0-9')
+  if [ "${TN:-0}" = 0 ] || [ "$SN" != "$TN" ]; then
+    echo "[shadow] 行数不撞（原 $SN / 替 $TN）⇒ 删掉替代件，不随包走" >&2
+    rm -rf "$SHADOW_STAGE"; return 1
+  fi
+  chmod 640 "$tl" 2>/dev/null
+  chgrp shadow "$tl" 2>/dev/null
+  echo "[shadow] 替代件已就位：$tl（$TN 行，root 栏 = !；原件 $SHADOWF 不进包）" >&2
+  return 0
+}
 
 # 闸门本体（第 5 节词形 = 只打印；第 6 节已知凭证串回归 = 判据）。
 # 抽成函数是为了 --selftest 能用一棵假树在**任何一台机器**上把它跑一遍 —— 手机端掉线这段时间里，
@@ -126,7 +153,8 @@ EOF
 }
 
 # 自测：造一棵最小假树，把 key 埋进"保留集"里看闸门抓不抓得到；再撤掉埋的看会不会误报；
-# 最后把凭证源清空，确认它走"取不到串"那一支而不是假装通过。合计 3 条断言。
+# 最后把凭证源清空，确认它走"取不到串"那一支而不是假装通过；再加两发管 /etc/shadow 替代件
+# （锁掉 root 栏、原哈希不残留，以及原件读不到时要报错而不是产出一个空文件）。合计 5 条断言。
 selftest() {
   T=$(mktemp -d) || { echo "!! mktemp 失败"; exit 1; }
   mkdir -p "$T/root/.dsh/provider" "$T/etc" "$T/data"
@@ -156,6 +184,22 @@ selftest() {
   rm -f "$T/root/.dsh/entry.key" "$T/root/.dsh-env"; rm -rf "$T/root/.dsh/provider"
   OUT=$(run_gate 2>&1)
   if printf '%s\n' "$OUT" | grep -q '取不到串（不是 0）'; then echo "  C 凭证源为空 ⇒ 报"取不到串"而不是 0 : PASS"; PASS=$((PASS+1)); else echo "  C !! 没走空读数那一支: FAIL"; FAIL=$((FAIL+1)); fi
+  # D) /etc/shadow 替代件：root 栏要锁掉、别的行要在、原件那串哈希不能出现在替代件里
+  printf 'root:$6$rounds$FAKEHASH000000000000000000:19000:0:9000:::\ndaemon:x:19000:0:9000:::\n' > "$T/etc/shadow"
+  SHADOWF="$T/etc/shadow"; SHADOW_STAGE="$T/stage"
+  DOUT=$(stage_shadow 2>&1); DRC=$?
+  D1=$([ -f "$T/stage/etc/shadow" ] && grep -c '^root:!:19000:0:9000:::$' "$T/stage/etc/shadow" | tr -dc '0-9')
+  D2=$(grep -c '^daemon:x:' "$T/stage/etc/shadow" 2>/dev/null | tr -dc '0-9')
+  D3=$(grep -c 'FAKEHASH' "$T/stage/etc/shadow" 2>/dev/null | tr -dc '0-9')
+  if [ "$DRC" = 0 ] && [ "${D1:-0}" = 1 ] && [ "${D2:-0}" = 1 ] && [ "${D3:-1}" = 0 ]; then
+    echo "  D shadow 替代件：root 锁掉 / 别的行在 / 原哈希不残留 : PASS"; PASS=$((PASS+1))
+  else echo "  D !! rc=$DRC root!=${D1:-空} 别的行=${D2:-空} 哈希残留=${D3:-空}（期望 0 与 1/1/0）: FAIL"; FAIL=$((FAIL+1)); fi
+  printf '  D 明细：%s\n' "$DOUT"
+  # E) 原件读不到时必须**不产出**替代件也不假装成功（装机那步会因此报错，而不是悄悄放回一个空文件）
+  SHADOWF="$T/etc/no-such-shadow"; SHADOW_STAGE="$T/stage2"
+  EOUT=$(stage_shadow 2>&1); ERC=$?
+  E1=$([ -e "$T/stage2/etc/shadow" ] && echo y || echo n)
+  if [ "$ERC" != 0 ] && [ "$E1" = n ]; then echo "  E 原件读不到 ⇒ 退码非 0 且不产出空件 : PASS"; PASS=$((PASS+1)); else echo "  E !! rc=$ERC 产出=$E1（期望 非0 与 n）: FAIL"; FAIL=$((FAIL+1)); fi
   echo "  合计 $((PASS+FAIL)) 条：PASS $PASS / FAIL $FAIL"
   rm -rf "$T"
   [ "$FAIL" = 0 ]
@@ -165,7 +209,11 @@ if [ "$MODE" = "--selftest" ]; then selftest; exit $?; fi
 
 if [ "$MODE" = "--pack" ]; then
   echo "[pack] exclude ${#EXCL[@]} 条；条目数由 PC 侧从同一条流数，这里不另数" >&2
-  tar_stream; rc=$?; echo "[pack] tar rc=$rc" >&2; exit $rc
+  stage_shadow || echo "[pack] !! 替代件没做成 —— 包里将没有 /etc/shadow（原件本来就不发），装机那步会报回来" >&2
+  tar_stream; rc=$?
+  rm -rf "$SHADOW_STAGE"
+  echo "[pack] tar rc=$rc；替代件目录已删（$(ls -d "$SHADOW_STAGE" 2>&1 | head -1)）" >&2
+  exit $rc
 fi
 
 if [ "$MODE" = "--meta" ]; then

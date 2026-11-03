@@ -1,7 +1,21 @@
 # dsh-mobile — 项目目标与进度
 
 > **接班先读这一段（2026-10-21 深夜改写，给冷启动的人）**
-> **最新一格是状态 39**（他一句："那你就先打包一个 release 出来，然后上传上去。" 北京 11-02 深夜到 11-03 凌晨，**手机不在场**）：
+> **最新一格是状态 40**（他一句："先不验证，直接提交"。北京 11-03 凌晨，手机**仍不在场**）：
+> **先说这句我按哪个意思做的**（免得下一个人读成"把闸门拆了"）：拆掉的是**需要他在场才能判的两格** —— ① `/etc/shadow` 里 root 有没有哈希（原打算等上机看一眼再定）、② 打包与发布之间那一步人工确认。
+> **两道泄露闸门一条没松**（它们不需要人，跑不过就不出包），而且**多了一条**。"不验证"落到实物上的部分是：`install-from-scratch.sh` 从没实机跑过这件事**不再当发布前提**，改为在文档与 `payload-meta.txt` 里明写"未经干净机验证"。
+> **`/etc/shadow` 改成"默认就安全"**：原件永不进包（进 `DROP`），`--pack` 时 `stage_shadow()` 现造一份 **root 栏 `!`、其余行原样**的替代件，落 `./root/payload-stage/etc/shadow`（`640` / `chgrp shadow`），装机脚本新增 **3b** 把它放回并复点三个数（root 首字符 / 行数与替代件相等 / 落点存在）。
+> 两条护栏都在 `--selftest` 里：**行数不撞就删掉替代件不随包走**、**原件读不到退码非 0 且不产出空件**（空文件放回 `/etc/shadow` 会抹掉整棵树的身份信息，那是更坏的形状）。
+> **代价写明白**：只解压、不走装机脚本的人拿到的 rootfs 没有 `/etc/shadow` —— 不影响 chroot 起来（我们全程是 Android 侧 root 进的），但 `passwd`/`su` 那条口令登录不可用。
+> **出包到挂 Release 现在是一条命令**：`bash tools/make-payload.sh --publish`（本机自测 → 设备普查 → 取流 → gzip → 两道闸门 → `SHA256SUMS`/`payload-meta.txt` → 超 1900 MB 切卷 → `gh release create payload-<UTC>`），**判成没成只认读回来的资产**（名字/字节/sha256 摘要），不认 `gh` 的退出码；切卷时只传卷。
+> **顺手抓出两个真 bug**（都是今晚不依赖手机就能验的那类）：① `gh -q '(|.assets|length|tostring)'` —— 开头那个 `|` 让 jq 直接报 `failed to parse jq expression`，**而退出码还是 0**（管道尾巴是 `tr` 的码），正确写法 `(.assets|…)`；
+> 用 canary 资产验通（2 件 9 B：建 → 读回名字/字节/digest → 删净，`releases` 长度复点 **0**）。② `--notes` 又用了 `"…\` + 换行` 续行（**同一条老坑的第 3 次出现**），改成多段 `NOTES="${NOTES}…"` 拼接。
+> **`--selftest` 从 3 条长到 5 条**，11-03 凌晨本机当场 **`合计 5 条：PASS 5 / FAIL 0`**（新增 D = 替代件 root `!` / 别的行在 / 原哈希不残留，E = 原件读不到不产出空件）；三份脚本 `bash -n` 都过、CR 都是 0。
+> **包与 Release 今晚还是没有**：`adb devices` 现在**连 `offline` 那行都不回了**（空列表），Windows 侧 `VID_22D9` 三条仍 `OK` ⇒ 只能他重插 USB / 勾"一律允许"。
+> **提交与推送**：（这一行在下一发里填死 —— 本仓规矩：回填那发自己的号不写，写了就自指）
+> **我这轮没做什么**：没打成包、没建 Release（`releases` 长度复点 **0**）；`install-from-scratch.sh` 新增的 **3b 一行都没实机跑过**（本机连不通 adb）；`--publish` 只验到 `gh` 的表达式与"建 / 读回 / 删资产"，**真 GB 级上传没跑过**；
+> `/usr` 那 1 GB 多没扫；新闸门与 shadow 替代件**在真机上一次都没跑过**（只在 PC 同型树上验的）；他的东西一个没碰；没 reboot、没装包、没重启引擎、没改 git 配置。全文 **RUNBOOK 14.39**。
+> 上一格是**状态 39**（他一句："那你就先打包一个 release 出来，然后上传上去。" 北京 11-02 深夜到 11-03 凌晨，**手机不在场**）：
 > **包还是没打成，而且是硬卡**：`adb devices -l` 一直是 `f22aa1e1 offline`，`reconnect offline` 后条目直接消失，`kill-server`/`start-server` 两轮、
 > 4×12 秒轮询、`mdns services`（空，机上没开无线调试）都没救回来；`Get-Process` 复点机器上**只有一发 adb**（pid 53652，不存在两个版本抢 5037），
 > 而 Windows 侧 `VID_22D9` 三条都是 `OK`（ADB Interface / USB Composite / WPD 一加 13）⇒ **手机侧那条调试会话掉了，PC 侧没有能自己按的按钮**。
@@ -1309,10 +1323,15 @@ npm 侧一条要看清：**包名不是 `dsh-market` 而是 `dshmarket`**（npmm
     **→ 状态 39 更正两条（旧话不删）**：② 那格今晚量掉了 —— canary 一发 80 B 资产**上传成功**（`gh release view --json assets` 读回 `size=80`），建/删 Release 都有权，只剩"GB 级要多久"没量；
     ① 那句"先看普查有没有敏感形状命中保留集"**判据作废**：词形普查在本机同型树上必然误报（`password` 43 个文件），闸门一现在是"**已知凭证串回归**"，
     并且出包前会先在本机跑 `bash scripts/dsh-payload-pack.sh --selftest`（今晚 **3/3 PASS**）。
+    **→ 状态 40 更正两条（旧话不删）**：那"两条命令"已经压成**一条** —— `bash tools/make-payload.sh --publish`（自测 → 普查 → 取流 → gzip → 两道闸门 → 指纹/元数据 → 切卷 → `gh release create` → 读回资产）；
+    ① 那格按他一句"先不验证，直接提交"**不再是发布前提**，改为在 `docs/INSTALL-from-scratch.md` 与 `payload-meta.txt` 里明写"未经干净机验证"（自测从 3 条长到 5 条，11-03 本机 `PASS 5 / FAIL 0`）。
 41. **手机回来之后，出包前只有一格还需要判断**（状态 39，RUNBOOK 14.38 八）：`--census` 第 4 节会报 `/etc/shadow` 里 root 那栏**有没有哈希**。
     "锁定/无哈希" ⇒ 可以随包走；"**有哈希**" ⇒ **不能随包走**（GB 级产物一旦公开，离线爆破是他机上那把锁的事），要在设备上把 root 栏改成 `!` 再打 ——
     那是**改机上系统文件**，做之前先备份、改完逐字节复点，并且**跟他说一句**再动。读数今晚拿不到（手机不在）。
     真包出来后 `gh release create <tag> release-assets/dsh-rootfs-<UTC>.tar.gz release-assets/SHA256SUMS release-assets/payload-meta.txt`（**资产名别以 `.` 开头**，gh 会改名）。
+    **→ 状态 40：这格作废，不需要读数也不需要他点头了** —— 走的是比"看一眼再定"更安全的默认：**`/etc/shadow` 原件永不进包**（进 `DROP`），
+    `--pack` 时用 `stage_shadow()` 现造一份 root 栏 `!`、其余行原样的替代件，装机脚本 **3b** 放回。所以"root 到底是不是哈希"这件事**不管是哪种答案都不改做法**。
+    那句 `gh release create …` 也并进 `--publish` 了（切卷时只传卷）。全文 RUNBOOK 14.39 二。
 
 
 ## 遗留问题
