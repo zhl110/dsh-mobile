@@ -2335,3 +2335,19 @@ cordis.patch.yml 里 phone-mcp 命中：2
 **没做什么**：没给无标签图标按钮补"相邻文字"提示（下一步候选，未做）；cordis 一行没动（`--dump-config` 命中即可，不重启）；没重启引擎。
 
 **提交**：子仓 **`44b5410`**（完整 `44b541095ac873f3728631ffa36dd9a2a4797a9f`）已上 `origin/main`（回声 `587bbe9..44b5410`；fetch 后 `rev-list --count` HEAD 与 origin/main **都是 33**、`origin/main..HEAD` = 0）。父仓 **`4ffa132`**（完整 `4ffa1329f574dbedad8b77344d07f44978f8e333`，主件）+ **`2bee1a0`**（完整 `2bee1a01115c35060b915b3a1bc6bf60237bf0be`，七支新探针补件）。回填这一发自己的号不写。
+
+### 14.53 端到端跑一轮：真触摸、回退、自愈、滚动、输入（2026-11-08 11:19–11:23，手机在场）
+
+**做法**：拿系统设置当靶子（不改系统设置项），从 `open com.android.settings` 起，每一步都由壳的 socket 发命令；PC 侧同步读 `dumpsys input` 的 RecentQueue 与 `actions.log`。探针 `scripts/dsh-e2e-*-probe146…156.sh`，读数 `downloads/p146–p157.txt`。
+
+**读数**
+- **点控件**：`tap id=28`（显示与亮度；树里 32 项）→ `已点击（触摸）` 548 ms，新屏 23 项；该发 **deviceId=4** at (759.7,3162.2)（= 控件中心 760,3163），DOWN→UP **64 ms**。
+- **点坐标**：`tap_xy(720,1505)` → **deviceId=4** at (720.8,1505.0)，按住 **87 ms**。
+- **滚动**：`scroll down` → `已滚动（主区滑动）`，列表 23→27 项；RecentQueue 里 **20 处 deviceId=4** 的 MOVE/UP（不是 -1）；`scroll up` 回到 23 项。
+- **回退**：chroot 里 `pkill -f "dsh-uinput.py --serve"` 后**立刻**发 `tap_xy` ⇒ 该发 **deviceId=-1** at (720,1505)（无障碍手势，按设计回退），请求仍 `ok=true`；**4 秒内**桥把它重起成新 pid **26749**（父 25618），再点一发回到 **deviceId=4**。
+- **输入**：`type id=31`（树里那个 `控件 "搜索编辑框"`，**不是** EditText）→ `set=false`、回读空，日志 `type id=31 chars=10 set=false` ⇒ 壳没骗人；点进搜索页后真正的可编辑节点是 `[26] 输入框 "搜索设置项" · 可输入 · 已聚焦`，`type id=26` → **`已输入，回读："dsh e2e 测试"`**、`set=true`、453 ms。
+- **注入器持有真设备**：`/proc/15360/fd/3 -> /data/local/dsh-rootfs/dev/input/event8`；`dumpsys input` 设备表只有 `Device 4: touchpanel`，没有多出来的虚拟设备。
+
+**结论**：真触摸层这五种动作（点控件 / 点坐标 / 滚 / 回退后重试 / 聚焦输入）落下去都是 `deviceId=4`；注入器死了会**退回无障碍并在 4 秒内自愈**；输入只对标了 `· 可输入` 的节点生效，点到套壳节点会如实报 `set=false`（与"点空标签图片进表情包"同一族：模型挑错了节点角色）。
+
+**没做什么**：没在银行/支付类 App 上跑；长按没单独测（与普通点走同一个 `holdMs` 参数）；这轮读数**未提交**（他没让提交）。测试完已把前台还回 DSH。
