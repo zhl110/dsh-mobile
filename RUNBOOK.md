@@ -2150,3 +2150,118 @@ Release 那一发不是提交，读回写在六（body **522 字符**、`README.
 **七、隐私闸门与提交**
 提交前 `bash tools/check-private.sh`（扫跟踪区）应仍 **合计命中 0**。本轮暂存见提交那次（不 commit 除非他说）。回填那一发自己的号不写。
 
+### 14.45 他问"操控太慢 / 没有'AI 正在操控'提示 / 没法用原生输入法，在哪儿优化"：先落地 ②提示 + ①提速（壳 0.14，已实测）（2026-11-08，北京 09:0x，手机在场）
+
+**② 操控提示：`TYPE_ACCESSIBILITY_OVERLAY` 悬浮条**
+无障碍服务可直接用 `WindowManager.addView` + `LayoutParams.TYPE_ACCESSIBILITY_OVERLAY` 在任意 App 上层叠一条小条 —— **不需要"悬浮窗/显示在其他应用上层"权限**（AccessibilityService 自带），`FLAG_NOT_FOCUSABLE | FLAG_NOT_TOUCHABLE` ⇒ 点不着、抢不走焦点。`TreeService.showBadge()` 在每次动作（tap/tap_xy/type/scroll/key）时显示"AI 正在操控你的手机"，最后一次动作后 **8s** 自动收（`BADGE_HOLD_MS`）；`onDestroy` 里收掉。**它不会污染 `screen`**：`screenText()` 只取 `TYPE_APPLICATION` 窗口，悬浮条是 `TYPE_ACCESSIBILITY_OVERLAY`，被跳过。实测截图 `downloads/badge14.png`（桌面顶部蓝色小条，肉眼确认）。
+
+**① 提速：三处**
+- **settle 分档**（`TreeService.settle()`）：窗口切换（`TYPE_WINDOW_STATE_CHANGED`）静默 150ms 就回；内容变化静默 200ms 回；一直没事件 900ms 回；硬封顶 **从 3s 降到 2s**（旧版首事件 1.5s / 静默 300ms / 封顶 3s）。新增 `windowStateCount` 专记窗口切换。
+- **回屏默认不带坐标**：`screen` 加 `detail` 参数（默认 false ⇒ 每行不带 `@(left,top-right,bottom)`，给 `tap_xy` 用时才 detail:true）。省 token ⇒ 模型那轮也快。
+- **桥同步**：`dsh-phone-bridge.js` 的 screen 工具加 `detail`、`toPayload` 透传；`--selftest` 从 16 长到 **17/17**。
+- **实测时延**（`downloads/p96.txt`）：纯读 `screen` **68ms**；窗口操作 `key notifications`/`key back` **890–962ms**（通知面板开关不触发 `TYPE_WINDOW_STATE_CHANGED`，走的是 900ms 兜底档）；无变化 `key home` **256ms**（有一次真触发了变化）、再按 **909ms**。**结论**：动作本身 0.07–0.96s，不是主要瓶颈；**真正的大头是每一步要模型再推理一次（几秒）** ⇒ 要更快得减轮次（多步一次调用）或换更快模型，不是再抠 settle。
+
+**③ 原生输入法：他一句"聚焦输入框就可以了" ⇒ 只做"聚焦唤键盘"，不做逐键、不自装输入法**
+`type`（0.15）现在先 **`ACTION_CLICK` 点进输入框**（点不着退坐标手势）——ACTION_CLICK 会给输入框真焦点、**唤出系统的原生输入法**；而 `ACTION_FOCUS` 常常只挪焦点、不弹键盘（0.14 及之前就是只 focus，所以用户反馈"用不了原生输入法"）。聚焦后再 `ACTION_SET_TEXT` 把字填进去、回读。不搞逐键点键盘（每字一次点击、慢），也不装独立输入法。
+**机器验证的缺口（如实写）**：我"安全地"打开的几个原生界面 —— DSH 自己的 WebView 输入框、系统 Settings、拨号盘 —— 里可输入节点的 `isEditable()` 要么 false、要么在 300 行截断之外读不到（WebView contenteditable 不按 EditText 暴露、拨号盘是自定义视图）⇒ **"聚焦后键盘真弹出来"这一下没在真机上机器验到**；要他在真 App（微信/搜索框这类标准 EditText）里试，不对再按具体 App 补。APK 0.15。
+
+**APK**：0.14 = **172,717 B** sha256 **`a14e867e7316f5468e19a043099bf24d4f5f93f25ec88d96232928698dd3bf20`**（versionCode 14，装机 `versionName=0.14`）；**0.15 = 172,719 B** sha256 **`0ff342065f1a0823452bc203e173384fc001868737a37c6eb179788262cb6b91`**（versionCode 15，`type` 改成先点聚焦、装机 `versionName=0.15`）；桥 md5 仍 `459df410…`（11,858 B，本轮未再改桥、没再重启引擎）。**没在真机点过 tap/type/scroll 落点**（同 14.44）。未提交。
+
+### 14.46 他提"遇到要选的弹窗时，AI 停在其他 App 里、我不知道也没法点":加 `handoff`（切回 DSH 交还用户）+ `open`（答完回原 App 继续）（2026-11-08，北京 09:2x，手机在场）
+
+**需求**：AI 在别的 App 操作时遇到需要用户决定的弹窗/登录/验证码/支付/授权，它会停在那屏；用户既看不到它在要什么，也没法点。要它**遇到选择时切回 DSH、让用户选、再继续**。
+
+**做法：两个新工具（第 7、8 个）**
+- `handoff(reason)`：壳服务把 **DSH 自己（MainActivity）`startActivity` 拉到前台**、把 `reason` 记进日志/返回；同时记下"刚才在操作哪个 App"（`lastTargetPkg`）。返回里告诉模型：已切回 DSH、原来在操作 `<pkg>`、请在聊天里问用户、用户答完用 `open` 回来。模型随后在聊天里发问（现在 DSH 在前台，用户看得见）。
+- `open(app)`：按**包名**或**启动器标签模糊匹配**拉起一个 App，返回打开后的新屏。用户答完，模型 `open(<原 pkg>)` 回到原 App 继续。
+- 详情：`handoff` 时若报"遇到选择"把 badge 文案改成「AI 需要你选择：回到 DSH」并留 60s；`lastTargetPkg` 排除本 App 与 `com.android.systemui`（状态栏过渡帧会误报成 systemui）；Android 11+ 按名字找 App 需要 manifest 里 `<queries>` 声明 `MAIN/LAUNCHER`（没申请 QUERY_ALL_PACKAGES）。
+- **`startActivity` 从无障碍服务起是通的**（没有被 BAL 拦）：实测 `ResumedActivity` 从 `com.android.settings/.Settings` → **`com.zhl.dsh/.MainActivity`**（`downloads/p98c.txt` 附近读数）。
+
+**实测（`downloads/p98e.txt`，0.18）**：`open com.android.settings` → 回屏 `屏幕 · com.android.settings · 共 32 项`；`handoff` → `你刚才在操作 com.android.settings`；再读屏 = `com.zhl.dsh 共 32 项` ⇒ **切回 DSH 成功**。
+
+**这轮踩的两个坑**
+- **`open` 会读回 systemui 过渡帧**：`startActivity` 后立刻 `settle()`（提速版 150ms 就回）会抓在启动动画里 ⇒ 读回 `com.android.systemui` 那种假屏（p98d）。修法：`open` 后**轮询到前台包不再是 systemui/本 App 再读**（封顶 3s）。
+- **屏幕熄灭会把 App 冻住**（`OplusHansManager ... freeze uid:10350 com.zhl.dsh ... scene: LcdOff`）：前台服务也拦不住熄屏冻结（p98 第一发因此读数错乱）。⇒ 真机测试前先 `input keyevent 224` 唤醒；实际使用中屏幕是亮的，不影响。这是"OOS 冻结"那条（AGENTS 已知坑）的又一种触发（熄屏）。
+
+**APK**：0.16 `cb6369e2…` / 0.17 `6e88b839…` / **0.18 = 172,717 B sha256 `52ae9dfaf945765886af6a3cd0f41818a35e6323102d634ea12723e22e761190`**（versionCode 18）；桥 **md5 `9f249c45…`（13,412 B，含 handoff/open）**，引擎重启 23282→**20982**、桥 21515。**没让真模型跑一次 handoff 的聊天回合**（那要他在 DSH 里试）；0.17/0.18 只是壳侧修正、桥没再变也没再重启引擎。未提交。
+
+
+### 14.47 他一句"不要这种纯蓝色的实心框，要那种渐变色的。边缘虚化的那种淡蓝色"：把提示条换成 BadgeView（软件层 + 双层 BlurMaskFilter + 淡蓝 LinearGradient，壳 0.19，截图确认）（2026-11-08，北京 09:2x，手机在场）
+
+**形状**：原来那条 0.14 的提示是 `TextView` + `GradientDrawable`（纯色 `0xE61B6EF3`、20dp 圆角）⇒ 就是他不想要的"纯蓝实心框"。改成自定义 `View`（`TreeService.BadgeView`）：
+- `setLayerType(LAYER_TYPE_SOFTWARE, null)` —— `BlurMaskFilter` 只在软件层生效。
+- **外层光晕**：`BlurMaskFilter(blur*1.5f, NORMAL)` + `LinearGradient(0x708FC6FF → 0x40D9ECFF)`，模糊半径大 ⇒ 边缘散开，做出"淡淡一圈"。
+- **主层**：`BlurMaskFilter(blur*0.8f, NORMAL)` + `LinearGradient(0xDF8FC6FF → 0xE0D9ECFF)`（左上淡蓝 → 右下近白）⇒ 渐变 + 边缘虚化。
+- **文字不受模糊**：深海军蓝 `0xFF0E2A52`，13dp，居中画。
+- 尺寸按 `measureText + (padH+blur)*2` / `字体高 + (padV+blur)*2` 现算（blur=10dp、padH=20dp、padV=10dp）；`lp.y` 从 44dp 调到 **40dp**（算上了模糊外扩）。
+- `showBadgeText` 里 `badge instanceof TextView` 改成 `instanceof BadgeView`；`hideBadgeNow` 不变（`removeView` 与类型无关）。
+
+**读数**：`bash app/build.sh` ⇒ javac 28 个 class、dex 84,512 B、成品 **172,717 B**；`bash tools/install-apk.sh` 逐字节撞上（清单 1 / 推上去 1 / 撞上 1），机上 `base.apk` sha256 = 本地 = **`d62190cd5a1364b6e15ab75ff712b0b5230af1ca19ecda824b2bd55e94834566`**、`versionName=0.19`、`lastUpdateTime=2026-11-08 09:24:15`。截图 **`downloads/badge19.png`**（探针 99 先按 `key home` 让背景干净、8 秒窗口内截）：顶部一条**左淡蓝→右近白的渐变胶囊，四周有一圈散开的淡蓝光晕，文字深蓝**——与 0.14 那张实心蓝块 `downloads/badge14.png` 是两种东西。探针 99 读数 `downloads/p99.txt`（`HOME ok=true`）。
+
+**没做什么**：桥没改（仍 `9f249c45…`）、引擎没重启、cordis 没动；没触发真模型的聊天回合（这格只是外观，动作管的还是 tap/type/scroll/key/open/handoff）；**未提交**（铁律 9）。
+
+### 14.48 他看一眼就要"再淡一些、透明质感"＋一句"要保证别的软件识别不到是 AI 在操控"：提示条再淡一层（壳 0.21）+ 把"现在能不能被识别"量成硬读数（2026-11-08，北京 09:5x–10:0x，手机在场）
+
+**A. 提示条（0.19 → 0.21）**
+- 0.19 先把 `TextView`+`GradientDrawable` 换成 `BadgeView`（软件层、双层 `BlurMaskFilter`、淡蓝 `LinearGradient`），他一见就要"**再淡一些，我要透明的质感**"。
+- 0.20：主层 alpha 从 `0xDF/0xE0` 降到 `0x66/0x6E`、光晕降到 `0x33/0x14` ⇒ 太淡，深色页面上深蓝字发闷。
+- **0.21（现役）**：主层 `0x7A8FC6FF → 0x82E2F1FF`、光晕 `0x38/0x14`，另加一层 **文字白柔光**（`0x99FFFFFF` + `BlurMaskFilter(2.5dp)`）垫在深蓝字下面 ⇒ 半透明能透出底下的东西，深浅背景都读得清。
+- 读数：APK 0.21 = **172,716 B**、sha256 **`31b56f67716f292a591d639d2d72372491547d431bf6d31970376db355f853a4`**、装机 `versionName=0.21`、机上 base.apk 与本地逐字节撞（`find /data/app` 那发 + `sha256sum` 两行）。截图：**`downloads/badge21.png`**（深色 DSH 页上）与 **`downloads/badge21-light2.png`**（浅色桌面）——胶囊左淡蓝→右近白、四周一圈散开的光晕、边缘是化开的，背景能透出来。
+- 顺手记一条**截图时机的坑**：`key home` 会把提示重设为 8s（`showBadge()` 覆盖 handoff 的 60s 文案与时长）⇒ 想截"桌面上的提示"要用 `handoff`（60s）再发**宿主侧** `input keyevent 3`，不要用我们的 `key home`（那会重置计时）。前几发"截不到"全是这个原因，不是提示没显示。
+
+**B. "其他软件识别不到是 AI 在操控" —— 先量清现在能不能被识别：能，而且不是推断**
+1. **无障碍服务在公开列表里**：`dumpsys accessibility` 的 Bound services 打出四条，含 `Service[label=DSH 手机控制, capabilities=33, eventTypes=[TYPE_WINDOW_STATE_CHANGED, TYPE_WINDOW_CONTENT_CHANGED]]`。`AccessibilityManager.getInstalledAccessibilityServiceList()/getEnabledAccessibilityServiceList()` 是**公开 API、不要权限**，任何 App 都能拿到同一份（标签就写着"DSH 手机控制"）。他机上另三条常开：`GKD`、`喵喵记账-自动记账`、`#一指禅` —— 任何"见无障碍就拦"的 App 现在就已经拦了，我们能改的是"**这一个**是 AI"的指纹。
+2. **每一发触摸自己带标记**（决定性）：打一发 `tap_xy(1000,1250)` 后 `dumpsys input` 的 RecentQueue 原文：
+   `MotionEvent(deviceId=-1, ..., source=TOUCHSCREEN, action=DOWN, flags=0x00000800, ...)`（UP 同样）。
+   `deviceId=-1` + `flags=0x00000800`。AOSP `MotionEvent.FLAG_IS_ACCESSIBILITY_EVENT = 0x800`（`MotionEvent.java`）⇒ **App 在 `onTouchEvent` 里读 `event.getFlags() & 0x800` / `getDeviceId()==-1` 就知道这一下不是手指**。读数 `downloads/p102.txt` + 宿主那两行 `dumpsys input`。
+3. 结论：**现在这套（无障碍 `dispatchGesture`）做不到"识别不到"** —— 服务列表 + 事件标志 + deviceId 三个面都是明的；行为上还是"零延迟、无抖动"。要往这个目标走，必须换注入层，不是调参数。
+
+**C. 换注入层的地基（只读探针 101，`downloads/p101.txt`）—— 全是通的**
+- chroot 里 `ls -l /dev/uinput`：`crw-rw---- 3011:3011 10,223 u:object_r:uhid_device:s0`；`/proc/misc` 有 `223 uinput`。
+- **open 成功**（`OPEN ok fd=3`），且 **python3 3.12.3 + fcntl** 在位 ⇒ 建一个虚拟触摸屏（UI_DEV_SETUP/UI_SET_*BIT/ABS_MT_*）在引擎侧就能做，不需要新装包。
+- `/proc/1/root/system/bin/screencap`、`.../uiautomator` 都在（读屏的备用路存在，但都要另接）。
+- 机上有 **LSPosed / Shamiko / ZygiskSU**（`/data/adb/modules`），所以"对指定 App 隐藏无障碍服务"这条路技术上存在（需要写模块，另说）。
+- 走 uinput 的好处：事件从 **evdev → InputReader** 进来，`deviceId` 是真实正数、`flags=0`，与真手指同一条路；厂商真实触摸设备名可以先从 `dumpsys input` 读出来再仿。
+
+**D. 这轮没做什么（重要）**
+- **没换注入层**：动作仍是无障碍手势（`tap/scroll/key` 照旧）⇒ B 里那三个标记一个都还没去掉。
+- **没改服务标签**（仍写"DSH 手机控制"）、**没隐藏服务列表**、**没写 LSPosed 模块**、**没做人性化（抖动/间隔）**。
+- 没在真 App 里跑任何"检测 SDK"（读数来自系统侧 `dumpsys` 与 AOSP 常量；对具体某个 App 会不会拦，未逐个验）。
+- 银行/支付这类**专门把无障碍当安全边界**的 App 没有碰；要不要在那类 App 上用，是他决定，我不替他绕。
+- **未提交**（铁律 9）。桥/引擎/cordis 这轮都没动（桥仍 `9f249c45…`）。
+
+### 14.49 他选"换动作层 + 人性化"（不要 LSPosed）：动作改走 `/dev/uinput` 虚拟触摸屏，壳 0.26（2026-11-08，北京 10:1x–11:0x，手机在场）
+
+**为什么换**：14.48 量到旧的 `dispatchGesture` 每一发都带 `deviceId=-1 / flags=0x800`（AOSP `FLAG_IS_ACCESSIBILITY_EVENT`），App 在 `onTouchEvent` 里就能认出不是手指。他选"换动作层 + 人性化（推荐）"，不写 LSPosed 模块。
+
+**做法**
+- **注入器** `scripts/dsh-uinput.py`（6,621 B，md5 `9567cbd8…`）：Python + `fcntl.ioctl` 在 `/dev/uinput` 造一个名为 `touchpanel` 的虚拟触摸屏（ABS_MT_*，range 0..32767，`INPUT_PROP_DIRECT`），事件走 **evdev → InputReader**。人性化写在注入器里：落点 ±25 raw（≈1px）、按下前 10–60ms 随机、按住 55–120ms、滑动 ease-in-out + 每步 ±18 raw 抖动、时长 260–380ms。
+- **方向反过来**（第一次接错了）：App 去连 root 的 socket 被 SELinux 拒 —— `dmesg` 原文 `avc: denied { connectto } for comm="dsh-tree-server" ... scontext=u:r:untrusted_app ... tcontext=u:r:su`。改成 **root 连 App**：`TreeService` 起 `@dsh-inject` 服务端，注入器连上来后保持长连接；App 在这条连接上发 JSON。断线由注入器每 2s 重连；注入器挂了由桥 3s 后重起（`ensureInjector`）。
+- **谁拉起注入器**：桥 `dsh-phone-bridge.js`（14,424 B，md5 `5b92b309…`）启动时 `spawn('/usr/bin/python3', ['/usr/local/bin/dsh-uinput.py','--serve'])`；`tools/deploy-phone-control.sh` 一起推（新增 `INJ_SRC/INJ_DEV` 与 md5 对账）。
+- **壳侧**：新增 `Uinput.java`（静态长连接 + `tap/swipe`）；`tap`（按编号）/`tap_xy`/`scroll`/`type` 的聚焦点击优先走注入，失败自动退回原来的无障碍手势/控件动作（注入器不在时功能不受影响）。`handoff`/`open`/`key` 不变。
+- **服务标签改名**：`DSH 手机控制` → **`屏幕辅助`**（`dumpsys accessibility` 已读回 `Service[label=屏幕辅助`），`tree_service_desc` 去掉 DSH 字样；桥的报错文案同步改。
+
+**读数（全是现场量的）**
+- 注入器能建设备：probe 104 打出 `Device 10: touchpanel`，事件 `deviceId=10`、坐标 (1000,1250)。**`/dev/uinput` 在 chroot 里 `OPEN ok`、python3 3.12.3 + fcntl 在位**（probe 101）。
+- **坐标映射**（probe 109）：raw 8192/16384/24576 → 屏幕 360/720/1080（X）、792/1584/2376（Y）⇒ 线性、1:1。
+- **第一次落错**：壳的 `getResources().getDisplayMetrics()` 报的是**旋转后的 3168x1440**（当时外屏是横屏），而注入器按自然方向映射 ⇒ (1000,1250) 落到 (455,2748)。改成 `Display.getRealSize()` + `Display.getRotation()` 先转回自然方向再归一化（`TreeService._norm()`）。竖屏复测 **998.9,1249.4**（probe 111/112）。
+- **横屏三种旋转都验了**（把 DSH 拉到前台后 `cmd window user-rotation lock 1/3/2` 能真转，Settings/Quark 前台转不动）：以 `tap_xy(1000,1250)` 为靶，dumpsys input 里读到的自然坐标与 `_norm()` 公式逐一对上 ——
+  - ROTATION_90（cur=3168x1440）：落到 (190.5,1000.1) = (1440−1250, 1000)；
+  - ROTATION_270：落到 (1249.1,2170.5) = (1250, 3168−1000)；
+  - ROTATION_180（cur=1440x3168）：落到 (440.6,1918.3) = (1440−1000, 3168−1250)；
+  - ROTATION_0：落到 (1000.2,1250.8)。
+  测完 `cmd window user-rotation free`（尊重重力感应；他现在把手机横着放，所以 free 后仍是 3168x1440，不是我们又把它转回去了）。读数 `downloads/p111/p112/p129/p130/p131.txt`。
+- **flags 的真相（真设备对照已做）**：全部无障碍关掉时，同一个注入器的触摸是 `flags=0x00000000`（probe 104d）；只开我们这一个时变 `0x00000800`（probe 104e）；`adb shell input tap`（注入路径）在有服务时仍是 0。**再补一发真设备对照**（probe 134）：直接往 **真触摸设备 `/dev/input/event8`**（`P: Phys=synaptics_tcm/touch_input`，手指走的就是它）写一发完整 MT 触摸（raw 16000,20000，不 grab），系统收到的是 **`deviceId=4 flags=0x00000800`**、坐标 (1000,1250)。⇒ **0x800 是"这台机开着会派手势的无障碍服务"给硬件设备事件打的标，不是"AI 注入"专用标；真手指与我们的触摸在 flags 上没有差别。** 真正会暴露"不是手指"的是旧路的 `deviceId=-1`（无障碍 `dispatchGesture`），uinput 已经是真实正数。
+  → **顺带发现一条更好的路**：`evdev` 的 write 在这台机上不用 grab 就能注入，事件从 **deviceId=4（真触摸设备）** 进系统 ⇒ 可以彻底避免"多出一个 touchpanel 设备"的指纹；下一步换（见"继续"一节）。
+- **HOME 键不能走 uinput**：虚拟键盘设备（`uinput_nav`）建出来了，`KEYCODE_HOME` 按下/抬起也发了，Quark 前台纹丝不动（probe 116）⇒ `key` 保持 `performGlobalAction`（它不产生 MotionEvent，没有 deviceId/flags 可看，换不换收益一样）。
+- **回退链实测**：注入器在 ⇒ `deviceId=16` 坐标 (998.9,1249.2)；`kill` 掉 ⇒ 下一发 `deviceId=-1` 但 `TAP ok=true`（自动退回无障碍）；3 秒后桥重起注入器 ⇒ `deviceId=18` 坐标 (1000.9,1247.7)。读数 `p127a/b/c.txt`。
+- **滚动**：`scroll down` 返回"已滚动（主区滑动）"，Settings 的项数 32 → **33**（probe 120/121），事件是一串 MOVE 到 UP（末尾 y≈999）。
+- **引擎/注入器代数**：SIGTERM 8423 → **25088**；桥 25618（父 25088）；注入器 25629（父 25618），被杀后 30453（父 25618）。
+
+**APK**：0.22–0.26 是同一件事的中间发；**0.27 = 176,813 B sha256 `592de335135215cd38cfbda0bce261c0da646bc32fd51afc3f31047bdb88f6e1`**（versionCode 27，装机 `versionName=0.27`，机上 base.apk 与本地逐字节撞；0.27 只比 0.26 多把保活通知的文案从"DSH 手机控制"改成"屏幕辅助运行中"，防止有通知读取权限的 App 从通知里看出来）。`Uinput.class` 已加进 build.sh 的 javac 闸（缺了会停）。
+
+**这轮没做到 / 仍是缺口（如实写）**
+- **`type` 只改了聚焦那一下的点击，没有重新端到端跑一次输入法**（DSH 页的输入框在树里找不到候选，Settings 搜索框也没找到可识别节点）。
+- **设备枚举的残余指纹**：输入设备表里现在有**两个** `Device … touchpanel`（真机 4 / 我们的 16、18）。App 用 `InputManager.getInputDeviceIds()` 能看见多出来的一个；**下一步换 evdev 写真设备就能去掉**（见上）。
+- **只改了我们的标签**：他机上 GKD / 喵喵记账 / #一指禅 三条无障碍服务照旧在公开列表里，见无障碍就拦的 App 仍会拦（这是他的取舍，没动）。
+- **没写 LSPosed 模块**（他选的不是那条）、**没碰银行/支付类 App**、**没重启自启/没改 cordis**。

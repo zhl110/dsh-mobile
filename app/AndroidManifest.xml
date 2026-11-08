@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.zhl.dsh"
-    android:versionCode="13"
-    android:versionName="0.13">
+    android:versionCode="27"
+    android:versionName="0.27">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- 0.6 起多了两条：语音输入插件在页面里调 getUserMedia({audio:true})，WebView 那边要先把
@@ -21,6 +21,15 @@
          specialUse 是 Android 14+ 的声明类型，sideload 不需要 Play 的那套理由。 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <!-- 0.16：open 工具要按名字/包名找到并拉起别的 App，Android 11+ 需要声明能看见哪些 App。
+         只要"带启动器图标的应用"（MAIN/LAUNCHER），不申请 QUERY_ALL_PACKAGES 那种大而全。 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="false"

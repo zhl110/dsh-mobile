@@ -31,8 +31,10 @@ export MSYS2_ARG_CONV_EXCL='*'
 ROOTFS=/data/local/dsh-rootfs
 RUNNER=/data/local/sh/dsh-chroot.sh
 BRIDGE_SRC=scripts/dsh-phone-bridge.js
+INJ_SRC=scripts/dsh-uinput.py
 SNIPPET=config/cordis-phone-mcp.snippet.yml
 BRIDGE_DEV="$ROOTFS/usr/local/bin/dsh-phone-bridge.js"   # 宿主视角；chroot 里看是 /usr/local/bin/dsh-phone-bridge.js
+INJ_DEV="$ROOTFS/usr/local/bin/dsh-uinput.py"            # 同上；/dev/uinput 注入器（python3）
 CORDIS="$ROOTFS/root/.dsh/profiles/web/cordis.patch.yml" # 宿主视角；chroot 里看是 /root/.dsh/profiles/web/cordis.patch.yml
 BAKDIR="$ROOTFS/root/.dsh"
 STAGE=/data/local/tmp
@@ -42,13 +44,16 @@ S() { "$ADB" shell "su -c \"$1\"" </dev/null 2>&1 | tr -d '\r'; }
 CH() { "$ADB" shell "su -c \"$RUNNER --run '$1'\"" </dev/null 2>&1 | tr -d '\r'; }
 
 [ -f "$BRIDGE_SRC" ] || { echo "!! 仓库里读不到 $BRIDGE_SRC（要在项目根目录跑）"; exit 2; }
+[ -f "$INJ_SRC" ] || { echo "!! 仓库里读不到 $INJ_SRC"; exit 2; }
 [ -f "$SNIPPET" ] || { echo "!! 仓库里读不到 $SNIPPET"; exit 2; }
-for f in "$BRIDGE_SRC" "$SNIPPET"; do
+for f in "$BRIDGE_SRC" "$INJ_SRC" "$SNIPPET"; do
   CR=$(tr -cd '\r' < "$f" | wc -c)
   [ "$CR" = "0" ] || { echo "!! $f 有 $CR 个 CR：设备 bash/ YAML 会断在 CR 上，先 sed -i 's/\r\$//'"; exit 2; }
 done
 LOC_MD5=$(md5sum "$BRIDGE_SRC" | cut -d' ' -f1)
 LOC_BYTES=$(wc -c < "$BRIDGE_SRC" | tr -d ' ')
+INJ_MD5=$(md5sum "$INJ_SRC" | cut -d' ' -f1)
+INJ_BYTES=$(wc -c < "$INJ_SRC" | tr -d ' ')
 
 # 组合配置里数接线命中（不重启）。输出带标签的几行，肉眼/脚本都能读。
 # grep 模式一律无引号无 $()：四层引号里带单引号会被宿主 shell 先求值（AGENTS.md 已知坑）。
@@ -60,11 +65,18 @@ case "$MODE" in
   --check)
     echo "-- 只读对账（不写）"
     printf '  仓库桥  %s B  md5 %s\n' "$LOC_BYTES" "$LOC_MD5"
+    printf '  仓库注入器 %s B  md5 %s\n' "$INJ_BYTES" "$INJ_MD5"
     R=$(S "md5sum $BRIDGE_DEV 2>/dev/null | cut -d' ' -f1")
     B=$(S "wc -c < $BRIDGE_DEV 2>/dev/null | tr -d ' '")
     if [ -z "$R" ]; then echo "  机上桥  读不到（还没推）"; else
       printf '  机上桥  %s B  md5 %s\n' "$B" "$R"
       [ "$R" = "$LOC_MD5" ] && echo "  [ok] 桥逐字节相同" || echo "  [不等] 桥上那份与仓库不同"
+    fi
+    IR=$(S "md5sum $INJ_DEV 2>/dev/null | cut -d' ' -f1")
+    IB=$(S "wc -c < $INJ_DEV 2>/dev/null | tr -d ' '")
+    if [ -z "$IR" ]; then echo "  机上注入器  读不到（还没推）"; else
+      printf '  机上注入器 %s B  md5 %s\n' "$IB" "$IR"
+      [ "$IR" = "$INJ_MD5" ] && echo "  [ok] 注入器逐字节相同" || echo "  [不等] 注入器与仓库不同"
     fi
     H=$(S "grep -c phone-mcp $CORDIS 2>/dev/null")
     echo "  cordis.patch.yml 里 phone-mcp 命中：${H:-0}（0=还没接线）"
@@ -102,6 +114,19 @@ case "$MODE" in
     R=$(S "md5sum $BRIDGE_DEV 2>/dev/null | cut -d' ' -f1")
     [ "$R" = "$LOC_MD5" ] || { echo "!! 桥 md5 不撞：仓库 $LOC_MD5 机上 $R"; exit 1; }
     echo "[ok] 桥逐字节相同（md5 $LOC_MD5，755 root:root）"
+
+    # 1b) 推注入器（python3，/dev/uinput）
+    name2=".dshtmpuinput.$$"
+    PO0=".pushout0.$$"
+    "$ADB" push "$INJ_SRC" "$STAGE/$name2" > "$PO0" 2>&1; RC0=$?
+    PP0=$(tr -d '\r' < "$PO0"); rm -f "$PO0"
+    echo "  push 注入器：$PP0"
+    [ "$RC0" = "0" ] || { echo "!! 注入器 push 退出码 $RC0，停手不搬"; exit 1; }
+    S "cp $STAGE/$name2 $INJ_DEV; chmod 755 $INJ_DEV; chown root:root $INJ_DEV; rm -f $STAGE/$name2"
+    IR=$(S "md5sum $INJ_DEV 2>/dev/null | cut -d' ' -f1")
+    [ "$IR" = "$INJ_MD5" ] || { echo "!! 注入器 md5 不撞：仓库 $INJ_MD5 机上 $IR"; exit 1; }
+    PY=$(CH "python3 -V")
+    echo "[ok] 注入器逐字节相同（$INJ_BYTES B，md5 $INJ_MD5，755 root:root）；chroot python：$PY"
 
     # 2) 备份 cordis（撞上才动）
     CEX=$(S "test -f $CORDIS && echo 在 || echo 不在")

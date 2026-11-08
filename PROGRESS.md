@@ -1,7 +1,35 @@
 # dsh-mobile — 项目目标与进度
 
 > **接班先读这一段（2026-10-21 深夜改写，给冷启动的人）**
-> **最新一格是状态 45**（他连说四遍："你一步做到位，做到位之后，然后我在手机上试一下。"＋"继续"。北京 11-08 08:2x–09:0x，手机在场、无障碍开关他自己开的）：
+> **最新一格是状态 50**（他选了"换动作层 + 人性化（推荐）"，不要 LSPosed。北京 11-08 10:1x–11:0x，手机在场）：
+> **动作层换掉了**：新增 `scripts/dsh-uinput.py`（6,621 B，md5 `9567cbd8…`）用 `/dev/uinput` 造虚拟触摸屏（名字 `touchpanel`），事件走 evdev → InputReader；人性化写在注入器里（落点 ±1px、随机按下/按住时长、滑动 ease-in-out）。壳新增 `Uinput.java`，`tap/tap_xy/scroll/type 的聚焦` 优先走它，**注入器不在就自动退回无障碍手势**。桥启动时拉起注入器（挂了 3 秒重起），`deploy-phone-control.sh` 一起推。**服务标签改成「屏幕辅助」**。
+> **方向踩过一次坑**：App 连 root 的 socket 被 SELinux 拒（`avc denied connectto untrusted_app→su`）⇒ 反过来：壳起 `@dsh-inject` 服务端，注入器连壳。
+> **读数**：raw 8192/16384/24576 → 360/720/1080（X）、792/1584/2376（Y）线性；竖屏 tap(1000,1250) 落 998.9,1249.4；注入器在 `deviceId=16`、被 kill 后 `deviceId=-1` 且操作仍成功（退回无障碍）、3 秒后重起 `deviceId=18`（`p127a/b/c`）；`scroll` 让 Settings 项数 32→33。引擎 8423→25088、桥 25618、注入器 25629（父 25618）。
+> **横屏三种旋转已实测**（DSH 前台时 `cmd window user-rotation lock 1/3/2` 能真转；测完 `free`）：90° → 落 (190.5,1000.1)、270° → (1249.1,2170.5)、180° → (440.6,1918.3)，与 `_norm()` 公式逐一对上（`p129/p130/p131`）。
+> **真设备对照已做**（`p134`）：直接往真触摸设备 `/dev/input/event8` 写一发 MT 触摸（手指走的就是它），系统收到 **`deviceId=4 flags=0x00000800`** ⇒ **0x800 是"开着会派手势的无障碍服务"给硬件事件打的标，不是 AI 专用**；与真手指在 flags 上没有差别。顺带发现 evdev write 不用 grab 就能注入 ⇒ **下一步换成写真设备，连"多一个 touchpanel 设备"的指纹也一起去掉**。
+> **APK 0.27 = 176,813 B sha256 `592de335…88f6e1`**，装机逐字节撞、`versionName=0.27`（0.27 只多了保活通知文案改中性：`屏幕辅助运行中`）。**还没做**：`type` 没重新端到端跑、设备表里多出一个 `touchpanel`（下一步换 evdev 真设备解决）、另外三条无障碍服务照旧在列表、没写 LSPosed。全文 **RUNBOOK 14.49**。
+> 上一格是**状态 49**（他两件事：①"再淡一些，我要透明的质感"；②"要保证我这个手机上的 AI 在操控我手机的时候，其他软件识别不到是 AI 在操控"。北京 11-08 09:5x–10:0x，手机在场）：
+> **① 提示条 0.21**：主层 alpha 再降到 `0x7A/0x82`、光晕 `0x38/0x14`，另加文字白柔光（`0x99FFFFFF`+`BlurMaskFilter(2.5dp)`）⇒ 半透明、能透出底下内容，深浅背景都读得清。APK **172,716 B** sha256 **`31b56f67…f853a4`**、装机 `versionName=0.21`、机上 base.apk 逐字节撞；截图 **`downloads/badge21.png`**（深色）与 **`downloads/badge21-light2.png`**（浅色）。
+> **② "识别不到"先量成硬读数：现在做不到，且不是推断**（`downloads/p101/p102.txt`）：
+> - 无障碍服务在**公开列表**里：`dumpsys accessibility` 打出 `Service[label=DSH 手机控制, capabilities=33, ...]`；`AccessibilityManager.getInstalledAccessibilityServiceList()/getEnabledAccessibilityServiceList()` 是**公开 API、不要权限**。他机上另有 GKD / 喵喵记账 / #一指禅 三条常开。
+> - **每一发触摸自带标记**：`tap_xy(1000,1250)` 后 `dumpsys input` 的 RecentQueue 原文是 `MotionEvent(deviceId=-1, ..., flags=0x00000800, ...)`（DOWN/UP 都是）；AOSP `MotionEvent.FLAG_IS_ACCESSIBILITY_EVENT = 0x800` ⇒ App 在 `onTouchEvent` 里读 flags/deviceId 就知道不是手指。
+> - **换注入层的地基是通的**：chroot 里 `/dev/uinput` 在（`uhid_device`）、**open 成功**、python3 3.12+fcntl 在位 ⇒ 可建虚拟触摸屏（evdev→InputReader，真实 deviceId、flags=0）；机上有 **LSPosed/Shamiko/ZygiskSU**（"对指定 App 隐藏无障碍服务"这条路存在，但要另写模块）。`/proc/1/root/system/bin/screencap`、`uiautomator` 也在（读屏备用路）。
+> **这轮没做的**：**动作仍是无障碍手势**（三个标记一个没去）、没改服务标签、没隐藏服务列表、没写 LSPosed 模块、没做抖动/间隔的人性化、没在具体 App 里跑检测 SDK；银行/支付这类把无障碍当安全边界的 App 没碰（要不要用他定）。**未提交**（铁律 9）。全文 **RUNBOOK 14.48**。
+> 上一格是**状态 48**（他说"不要这种纯蓝色的实心框，要那种渐变色的。边缘虚化的那种淡蓝色"——指 0.14 那条操控提示。北京 11-08 09:2x，手机在场）：
+> **提示条换成 `BadgeView`（壳 0.19）**：原来是 `TextView` + `GradientDrawable` 纯色 `0xE61B6EF3` ⇒ 就是他不想要的实心蓝块。现在改成自定义 View + **软件层**（`BlurMaskFilter` 只在软件层生效），两层画：外层 `BlurMaskFilter(1.5×)` 淡蓝光晕、主层 `BlurMaskFilter(0.8×)` + `LinearGradient(0xDF8FC6FF→0xE0D9ECFF)`（左上淡蓝→右下近白）⇒ **渐变 + 边缘虚化**；文字深海军蓝、不模糊、居中。尺寸按文字现算，`lp.y` 44→**40dp**（算上模糊外扩）。
+> **读数**：APK 0.19 = **172,717 B** sha256 **`d62190cd…834566`**，装机逐字节撞上、`versionName=0.19`；截图 **`downloads/badge19.png`**（顶部一条左淡蓝→右近白的胶囊，四周散开一圈淡蓝光晕，文字深蓝）——与 0.14 那张实心蓝块 `downloads/badge14.png` 是两种东西。探针 99（`downloads/p99.txt`，只按 `key home`）为截图提供干净背景。
+> **没做什么**：桥没改（仍 `9f249c45…`）、引擎没重启、cordis 没动；没让真模型跑聊天回合（这格只是外观）；**未提交**（铁律 9）。全文 **RUNBOOK 14.47**。
+> 上一格是**状态 47**（他说"别的页面执行时突然弹选项框，AI 就停在那、我不回 DSH 也不知道也没法点；遇到选择要切回它自己界面让我选、再继续"。北京 11-08 09:2x，手机在场）：
+> **加了两个工具（第 7、8 个）**：`handoff(reason)` = 把 DSH 自己 `startActivity` 拉到前台、交还控制权，并记下"刚才在操作哪个 App"；返回里让模型在聊天里问用户、答完用 `open` 回来。`open(app)` = 按包名或应用名拉起 App、回新屏，用于答完回原 App 继续。badge 在 handoff 时变「AI 需要你选择：回到 DSH」留 60s。manifest 加 `<queries> MAIN/LAUNCHER`（按名字找 App）。
+> **实测（`downloads/p98e.txt`，0.18）**：`open com.android.settings` → 回 `com.android.settings 32 项`；`handoff` → "你刚才在操作 com.android.settings"；再读屏 = **`com.zhl.dsh`** ⇒ **切回 DSH 成功**（`startActivity` 从无障碍服务起没被 BAL 拦，`ResumedActivity` settings→com.zhl.dsh 实测）。
+> **两个坑**：① `open` 后立刻读会抓在启动动画里、读回 `com.android.systemui` 假屏 ⇒ 改成"轮询到前台包不再是 systemui/本 App 再读"；② **熄屏也会冻 App**（`scene: LcdOff`，前台服务都拦不住）⇒ 真机测试先 `keyevent 224` 唤醒。
+> **APK** 0.18 = **172,717 B** sha256 **`52ae9dfa…61190`**（versionName=0.18）；桥 md5 `9f249c45…`（含 handoff/open），引擎 20982、桥 21515。**没让真模型跑一次 handoff 的聊天回合**（要他在 DSH 里试）。**未提交**（铁律 9）。全文 **RUNBOOK 14.46**。
+> 上一格是**状态 46**（他问"操控太慢 / 没有'AI 正在操控'提示 / 没法用原生输入法，在哪儿优化"，我建议先做 ②提示 + ①提速，他说"可以，你继续吧"。北京 11-08 09:0x，手机在场）：
+> **② 操控提示做成了**：壳 0.14 用 `TYPE_ACCESSIBILITY_OVERLAY` 在屏幕顶部叠一条"AI 正在操控你的手机"（**不需要悬浮窗权限**，点不着、不抢焦点，最后一次动作后 8s 自动收；`screen` 只读 `TYPE_APPLICATION` 窗口所以不会读到自己）。截图 `downloads/badge14.png` 肉眼确认。
+> **① 提速**：settle 改分档（窗口切换静默 150ms 回 / 内容变化 200ms / 无事件 900ms / 封顶 2s，旧版 1.5s/300ms/3s）；`screen` 默认不带坐标（新增 `detail` 参数，给 tap_xy 才要）。实测 `downloads/p96.txt`：纯读 68ms、按键 256–962ms。**结论写清：动作本身不是瓶颈，大头是每步一次模型推理（几秒）⇒ 要更快得减轮次或换模型，不是再抠 settle。**
+> **③ 原生输入法**：他一句"聚焦输入框就可以了"，所以 0.15 只做聚焦唤键盘 —— `type` 先 `ACTION_CLICK` 点进输入框（ACTION_CLICK 会真聚焦并弹原生键盘，`ACTION_FOCUS` 不弹），再 `ACTION_SET_TEXT` 填字。不逐键、不自装输入法。**机器验证有缺口**：安全的几个原生界面（DSH WebView 输入 / Settings / 拨号盘）可输入节点都读不到 `isEditable` ⇒ "键盘真弹出来"要他在真 App（微信搜索框这类）里试。
+> **APK** 0.15 = **172,719 B** sha256 **`0ff34206…cb6b91`**（versionName=0.15）；桥 md5 `459df410…`（本轮未再改桥、未再重启引擎）。**没在真机点过 tap/type/scroll 落点**。**未提交**（铁律 9）。全文 **RUNBOOK 14.45**。
+> 上一格是**状态 45**（他连说四遍："你一步做到位，做到位之后，然后我在手机上试一下。"＋"继续"。北京 11-08 08:2x–09:0x，手机在场、无障碍开关他自己开的）：
 > **做成了，完整控制环**：壳 **0.13**（versionCode 13）把 0.11 的只读扩成 **screen/tap/tap_xy/type/scroll/key** 六件（`TreeService.java` 520 行：三段式点击 = 本控件 ACTION_CLICK → ≤4 层可点父控件 → 坐标手势；EventClock 等稳 = 首事件 ≤1.5s + 静默 300ms、硬封顶 3s；手势走 HandlerThread + CountDownLatch；编号→节点缓存，动作后回新屏；密码框只标不填不渲染）。JSON 行协议（`{"cmd":…}`→`{"ok":…,"screen":…}`），兼容裸 `ping`/`screen`；`tree_service.xml` 补 `canPerformGestures="true"`（缺了 dispatchGesture 全回 false）。
 > **引擎侧接线**：壳没有 server SDK（探针 92）⇒ 手写零依赖 MCP stdio 桥 `scripts/dsh-phone-bridge.js`（11,488 B，`--selftest` 本机 **16/16 PASS**），工具名 `mcp__phone__*`。接线 = `config/cordis-phone-mcp.snippet.yml`（`- insert:` 一个 `@deepseek-ai/dsh-mcp-client` 实例，serverName=phone，stdio 起桥），`tools/deploy-phone-control.sh` 推桥 + 备份 cordis（sha256 撞上才写）+ 追加，`--dump-config` **phone_mcp=1 / bridge=1**（不重启判据，铁律 14）。
 > **端到端硬证**：最小重启引擎（13269→21616，入口 9685 自己拉新一代），新引擎 spawn 的桥 **pid 22254 父进程正是 21616** ⇒ mcp-client(phone) 已加载、工具已注册。探针 94（`downloads/p94i.txt`）：shell JSON ping/screen/key_home 全 ok、bad-id 回正确错；桥 MCP 6 工具；桥 `tools/call` screen+key home → `isError=false` + 新屏。链 = MCP → 桥 → abstract socket → 壳 → 动作 → 新屏。

@@ -31,19 +31,19 @@ public class PhoneKeepAlive extends Service {
         NotificationManager nm = getSystemService(NotificationManager.class);
         Notification n;
         if (Build.VERSION.SDK_INT >= 26) {
-            NotificationChannel c = new NotificationChannel(CHANNEL, "DSH 手机控制", NotificationManager.IMPORTANCE_LOW);
+            NotificationChannel c = new NotificationChannel(CHANNEL, "后台服务", NotificationManager.IMPORTANCE_LOW);
             c.setShowBadge(false);
             if (nm != null) nm.createNotificationChannel(c);
             n = new Notification.Builder(this, CHANNEL)
                     .setSmallIcon(android.R.drawable.stat_notify_sync)
-                    .setContentTitle("DSH 手机控制")
-                    .setContentText("保持后台应答引擎")
+                    .setContentTitle("屏幕辅助运行中")
+                    .setContentText("保持后台应答")
                     .setOngoing(true)
                     .build();
         } else {
             n = new Notification.Builder(this)
                     .setSmallIcon(android.R.drawable.stat_notify_sync)
-                    .setContentTitle("DSH 手机控制")
+                    .setContentTitle("屏幕辅助运行中")
                     .setOngoing(true)
                     .build();
         }

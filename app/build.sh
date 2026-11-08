@@ -19,8 +19,8 @@ KS_PASS="${DSH_KS_PASS:-}"
 if [ -z "$KS_PASS" ] && [ -f local/ks-pass ]; then KS_PASS=$(cat local/ks-pass); fi
 PKG=com.zhl.dsh
 MIN_API=26
-VER_CODE=13
-VER_NAME=0.13
+VER_CODE=27
+VER_NAME=0.27
 
 cd "$(dirname "$0")"
 # Git-Bash 会把 /data/local/tmp/x 这种参数改写成 D:/program files/Git/data/local/tmp/x 再交给 adb
@@ -88,7 +88,7 @@ javac -nowarn -J-Duser.language=en -source 8 -target 8 -bootclasspath "$APIJAR" 
 # javac 的退出码被上面那条 grep| || true 咽了 ⇒ 真正的闸是 class 产物。两个核心类都要在，
 # 缺哪个就是哪个没编过（0.12 这轮 TreeService 用了不存在的常量编失败、MainActivity 却编过了，
 # 旧闸只查 MainActivity ⇒ 差点把没有 TreeService 的废 APK 签出去）。
-[ -f out/build/classes/com/zhl/dsh/MainActivity.class ] && [ -f out/build/classes/com/zhl/dsh/TreeService.class ] || { echo "!! javac 没产出 MainActivity/TreeService 的 class（上面有编译错误）"; exit 1; }
+[ -f out/build/classes/com/zhl/dsh/MainActivity.class ] && [ -f out/build/classes/com/zhl/dsh/TreeService.class ] && [ -f out/build/classes/com/zhl/dsh/Uinput.class ] || { echo "!! javac 没产出 MainActivity/TreeService/Uinput 的 class（上面有编译错误）"; exit 1; }
 echo "[ok] javac 过了（$(ls out/build/classes/com/zhl/dsh | wc -l) 个 class）"
 
 # 4) class → classes.dex
