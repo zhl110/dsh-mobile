@@ -2333,3 +2333,5 @@ cordis.patch.yml 里 phone-mcp 命中：2
 ⇒ 点的是**一个没有文字标签的 `图片` 节点（就是表情按钮）**，一项从 69 涨到 131（表情面板）。**不是识图、不是脚本回放**：模型只能在"编号 + 角色 + 空标签"里靠位置猜；猜错后它自己重读、返回、再进。这正是"图标按钮没有 contentDescription ⇒ 树里只剩 `图片` 两个字"的形状（`labelOf` 取 text → contentDescription → hint，全空就只打印角色）。
 
 **没做什么**：没给无标签图标按钮补"相邻文字"提示（下一步候选，未做）；cordis 一行没动（`--dump-config` 命中即可，不重启）；没重启引擎。
+
+**提交**：子仓 **`44b5410`**（完整 `44b541095ac873f3728631ffa36dd9a2a4797a9f`）已上 `origin/main`（回声 `587bbe9..44b5410`；fetch 后 `rev-list --count` HEAD 与 origin/main **都是 33**、`origin/main..HEAD` = 0）。父仓 **`4ffa132`**（完整 `4ffa1329f574dbedad8b77344d07f44978f8e333`，主件）+ **`2bee1a0`**（完整 `2bee1a01115c35060b915b3a1bc6bf60237bf0be`，七支新探针补件）。回填这一发自己的号不写。
