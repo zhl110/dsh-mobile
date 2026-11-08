@@ -39,16 +39,22 @@ import android.view.accessibility.AccessibilityWindowInfo;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 壳 0.18：控件树读取 + 操作 + 操控提示 + 提速 + 交还用户（handoff/open）。
+ * 壳 0.28：控件树读取 + 操作 + 小鲸鱼提示条（按动作换词、末次动作留 60s）+ 动作日志 + 交还用户（handoff/open）。
  *
  * 形状参照 DSH Go 的 TreeCapture/ScreenFormat/Actuator/EventClock/PhoneBridge（调研件在
  * downloads/dsh-go-*，AGPL，只借形状不抄代码）：读当前屏幕的无障碍控件树压成带编号文本；
@@ -85,7 +91,7 @@ public class TreeService extends AccessibilityService {
     private static final long SETTLE_QUIET_MS = 200;
     private static final long SETTLE_FIRST_MS = 900;
     private static final long SETTLE_MAX_MS = 2000;
-    private static final long BADGE_HOLD_MS = 8000; // "AI 正在操控"提示：最后一次动作后留这么久
+    private static final long BADGE_HOLD_MS = 60000; // 提示条：末次动作后留 60s（模型思考那一两轮里也不会灭）
     private static final long HANDOFF_HOLD_MS = 60000; // 交还用户时，提示条留久一点
 
     private LocalServerSocket server;
@@ -215,14 +221,35 @@ public class TreeService extends AccessibilityService {
         try {
             switch (cmd) {
                 case "ping":   return ok("pong", null);
-                case "screen": return ok(null, screenText(req.optBoolean("detail", false)));
-                case "tap":    showBadge(); return doTap(req);
-                case "tap_xy": showBadge(); return doTapXy(req);
-                case "type":   showBadge(); return doType(req);
-                case "scroll": showBadge(); return doScroll(req);
-                case "key":    showBadge(); return doKey(req);
+                case "screen":
+                    showBadge("🐳 小鲸鱼正在看屏幕");
+                    return ok(null, screenText(req.optBoolean("detail", false)));
+                case "tap": {
+                    // 点的是"发送"就报发消息，其余一律"点一下"（按控件文字判断，不猜语义）
+                    Item it = find(req.optInt("id", -1));
+                    String label = it == null ? "" : labelOf(it.node);
+                    showBadge(label.contains("发送") ? "🐳 小鲸鱼正在发消息" : "🐳 小鲸鱼正在点一下");
+                    return doTap(req);
+                }
+                case "tap_xy": showBadge("🐳 小鲸鱼正在点一下"); return doTapXy(req);
+                case "type":   showBadge("🐳 小鲸鱼正在打字"); return doType(req);
+                case "scroll": showBadge("🐳 小鲸鱼正在翻页"); return doScroll(req);
+                case "key": {
+                    String k = req.optString("key", "");
+                    showBadge("back".equals(k) ? "🐳 小鲸鱼按了一下返回"
+                            : "home".equals(k) ? "🐳 小鲸鱼回到了桌面"
+                            : "recents".equals(k) ? "🐳 小鲸鱼打开了最近任务"
+                            : "notifications".equals(k) ? "🐳 小鲸鱼拉下了通知栏"
+                            : "🐳 小鲸鱼正在操控你的手机");
+                    return doKey(req);
+                }
                 case "handoff": return doHandoff(req);
-                case "open":    showBadge(); return doOpen(req);
+                case "open": {
+                    String a = req.optString("app", "").trim();
+                    showBadge(a.isEmpty() || a.contains(".") ? "🐳 小鲸鱼正在打开应用"
+                            : "🐳 小鲸鱼正在打开「" + a + "」");
+                    return doOpen(req);
+                }
                 default:       return err("未知命令：" + cmd);
             }
         } catch (Exception e) {
@@ -268,6 +295,9 @@ public class TreeService extends AccessibilityService {
                 longPress ? ViewConfiguration.getLongPressTimeout() + 300 : -1))
             how = longPress ? "已长按（触摸）" : "已点击（触摸）";
         if (how == null) how = click(n, longPress);
+        String lbl = labelOf(n);
+        logAction("tap id=" + id + " " + roleOf(n) + " \"" + (lbl.length() > 24 ? lbl.substring(0, 24) + "…" : lbl)
+                + "\" center=" + b.centerX() + "," + b.centerY() + " via=" + how);
         settle();
         return ok(how, screenText(false));
     }
@@ -301,6 +331,7 @@ public class TreeService extends AccessibilityService {
         int y = req.getInt("y");
         boolean done = uiTap(x, y, -1) || tap(x, y);
         if (!done) return err("手势未派发");
+        logAction("tap_xy " + x + "," + y);
         settle();
         return ok("已点击坐标 (" + x + "," + y + ")", screenText(false));
     }
@@ -334,6 +365,7 @@ public class TreeService extends AccessibilityService {
         n.refresh();
         CharSequence now = n.getText();
         String readback = now == null ? "" : now.toString();
+        logAction("type id=" + id + " chars=" + text.length() + " set=" + set + " readback_len=" + readback.length());
         settle();
         return ok((set ? "已输入" : "输入动作未确认") + "，回读：" + quote(readback), screenText(false));
     }
@@ -342,6 +374,7 @@ public class TreeService extends AccessibilityService {
         String dir = req.optString("direction", req.optString("dir", "down"));
         if (!dir.equals("up") && !dir.equals("down") && !dir.equals("left") && !dir.equals("right"))
             return err("方向只认 up / down / left / right");
+        logAction("scroll id=" + req.optInt("id", -1) + " dir=" + dir);
         if (req.has("id")) {
             int id = req.getInt("id");
             Item it = find(id);
@@ -436,6 +469,7 @@ public class TreeService extends AccessibilityService {
             default: return err("按键只认 back / home / recents / notifications");
         }
         boolean done = performGlobalAction(action);
+        logAction("key " + key + " ok=" + done);
         settle();
         return ok(done ? "已按 " + key : "按键动作未确认", screenText(false));
     }
@@ -471,7 +505,7 @@ public class TreeService extends AccessibilityService {
                 startActivity(i);
             }
         } catch (Exception ignored) {}
-        showBadgeText(reason.isEmpty() ? "AI 需要你选择（已切回 DSH）" : "AI 需要你选择：回到 DSH", HANDOFF_HOLD_MS);
+        showBadgeText(reason.isEmpty() ? "🐳 小鲸鱼想请你定一下（已切回 DSH）" : "🐳 小鲸鱼想请你定一下：回到 DSH", HANDOFF_HOLD_MS);
         return ok("已把 DSH 切到前台，等你回答。"
                 + (reason.isEmpty() ? "" : "要用户决定的是：" + reason + "。")
                 + "你刚才在操作 " + target + "。请在这里把问题和可选项告诉用户；用户回答后，用 open 工具重新打开 " + target + " 再继续。", null);
@@ -503,6 +537,7 @@ public class TreeService extends AccessibilityService {
             }
         }
         if (launch == null) return err("找不到可启动的应用：" + app);
+        logAction("open " + app + " -> " + resolved);
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
         startActivity(launch);
         // 等目标 App 真到前台，避开启动动画里的 systemui 过渡帧（否则会读回 systemui 那种假屏）。
@@ -634,10 +669,31 @@ public class TreeService extends AccessibilityService {
         }
     }
 
-    // ---- 悬浮提示（"AI 正在操控你的手机"） ----------------------------------------------------------
+    // ---- 悬浮提示（"小鲸鱼正在操控你的手机"） --------------------------------------------------------
 
-    /** 有动作时在屏幕顶部叠一条提示；最后一次动作后自动收。 */
-    private void showBadge() { showBadgeText("AI 正在操控你的手机", BADGE_HOLD_MS); }
+    /** 有动作时在屏幕顶部叠一条提示；提示条要等末次动作 60s 才收（模型思考那两轮里看得见）。 */
+    private void showBadge(String text) { showBadgeText(text, BADGE_HOLD_MS); }
+
+    /** 最近 300 行动作日志（包名/编号/角色/文字/坐标/实际做法；typed 内容只记长度）。
+     *  用来回查"那一下为什么点进表情包"这类误点，路径：/data/data/com.zhl.dsh/files/actions.log。 */
+    private void logAction(String s) {
+        try {
+            File f = new File(getFilesDir(), "actions.log");
+            List<String> all = new ArrayList<>();
+            if (f.exists()) {
+                BufferedReader r = new BufferedReader(new InputStreamReader(new FileInputStream(f), StandardCharsets.UTF_8));
+                String l;
+                while ((l = r.readLine()) != null) all.add(l);
+                r.close();
+            }
+            String ts = new SimpleDateFormat("MM-dd HH:mm:ss", Locale.US).format(new Date());
+            all.add(ts + " " + s);
+            while (all.size() > 300) all.remove(0);
+            FileOutputStream o = new FileOutputStream(f, false);
+            for (String l : all) o.write((l + "\n").getBytes(StandardCharsets.UTF_8));
+            o.close();
+        } catch (Exception ignored) {}
+    }
 
     private void showBadgeText(final String text, final long hold) {
         ui.post(new Runnable() { @Override public void run() {
@@ -783,7 +839,9 @@ public class TreeService extends AccessibilityService {
         head.append("屏幕 · ").append(pkg).append(" · 共 ").append(nextId - 1).append(" 项");
         if (truncated) head.append("（树被截断：节点/行数到上限）");
         head.append('\n');
-        return head.append(sb).toString();
+        String out = head.append(sb).toString();
+        logAction("screen " + pkg + " items=" + (nextId - 1) + (truncated ? " trunc" : ""));
+        return out;
     }
 
     /** 只收「可交互或有文字」的节点；布局壳折叠掉（DSH Go ScreenFormat 的同款口径，简化版）。 */

@@ -1,7 +1,21 @@
 # dsh-mobile — 项目目标与进度
 
 > **接班先读这一段（2026-10-21 深夜改写，给冷启动的人）**
-> **最新一格是状态 50**（他选了"换动作层 + 人性化（推荐）"，不要 LSPosed。北京 11-08 10:1x–11:0x，手机在场）：
+> **最新一格是状态 53**（他："桥、cordis、注入器都做完，然后提交"。北京 11-08 11:1x，手机在场）：
+> **三件与仓库逐字节一致**：桥 14,424 B md5 `5b92b309…`、注入器 9,512 B md5 `e9f6c113…`（`--check` 两条都 `[ok]`）；cordis 里 phone-mcp 命中 2，`--dump-config` 组合树 **phone-mcp 1 / bridge 1**；桥自测 **19/19**。
+> **端到端**：`tap_xy(2693,782)`（横屏）→ `ok=true 436ms`；`dumpsys input` 最新一发 **deviceId=4**、自然坐标 (658.4,2692.1) = `_norm` 期望值 ⇒ 壳重装后注入器自动重连、仍走真触摸设备。进程：引擎 25088 / 桥 25618 / 注入器 15360。
+> **日志第一批真实数据（拍到了"点进表情包"）**：`screen items=69` → `tap id=18 图片 "" center=1239,1532 via=已点击（触摸）` → `screen items=131` ⇒ 点的是**没有文字标签的 `图片` 节点（表情按钮）**，不是识图、不是脚本；下一步可给无标签图标补"相邻文字"提示（未做）。
+> **没做什么**：cordis 没改、引擎没重启；14.50 起的那批改动一起进本轮提交。全文 **RUNBOOK 14.52**。
+> 上一格是**状态 52**（他："改成小鲸鱼，按动作换词；提示别在思考时消失"，并同意加动作日志。北京 11-08 11:0x，手机在场）：
+> **壳 0.28**：提示条按动作换词 —— `🐳 小鲸鱼正在看屏幕 / 正在点一下 / 正在打字 / 正在发消息（点的控件文字含"发送"）/ 正在翻页 / 按了一下返回 / 回到了桌面 / 打开了最近任务 / 拉下了通知栏 / 正在打开「微信」/ 想请你定一下`，兜底仍是"正在操控你的手机"。**`screen` 也刷新提示**，末次动作后留 **60s**（原 8s，模型思考那一两轮里不再灭）。**动作日志**：`/data/data/com.zhl.dsh/files/actions.log`，环形 300 行：`screen 包名 items=N`、`tap 编号 角色 "文字" center=x,y via=做法`、`type 编号 chars=N`（**内容不记**）、`scroll id+方向`、`key 键名+返回值`、`open 请求名→解析名`。
+> **读数**：APK **176,812 B sha256 `1a03b0d1…29e058`**，`pm install -r` 后机上 base.apk 逐字节撞、`versionName=0.28`；探针 144 只发 `screen` → `ok=true ms=44 bytes=638`、`屏幕 · com.tencent.mm · 共 35 项`；截图 `downloads/badge028.png`（`🐳 小鲸鱼正在看屏幕` 叠在微信聊天页顶部）；日志当场读回 `11-08 11:03:25 screen com.tencent.mm items=35`（与 35 项对上）。
+> **装完一个坑**：重装杀掉进程后 **FGS 不会自己起**（`dumpsys activity services` 只剩 `TreeService`）⇒ `am start -n com.zhl.dsh/.MainActivity` 拉一次，`PhoneKeepAlive isForeground=true types=0x40000000` 复点，再把前台还回他原来的 `ChattingUI`。
+> **没做什么**：桥/cordis/注入器没动；`tap` 的日志行没在真机触发（微信正聊着，只读了 screen）；提示条位置没动（仍 40dp，压在 App 标题栏上）；**未提交**。全文 **RUNBOOK 14.51**。
+> 上一格是**状态 51**（"提交一下，再继续做"之后的继续：注入改写真触摸设备。北京 11-08 10:4x–11:0x，手机在场）：
+> **把"多一个 touchpanel"的指纹也去掉了**：`dsh-uinput.py` 现在优先打开**真触摸设备** `/dev/input/event8` 写 MT 事件（`touchpanel`，X 0..23040 / Y 0..50688），写不进才退回自建 uinput。读数：`dumpsys input` 里 `touchpanel` **只剩 Device 4**；`tap_xy(1000,1250)`（横屏）→ **`deviceId=4`**、自然坐标 (190.5,999.9)；`scroll` 也是一串 `deviceId=4` 的 MOVE；竖屏复测 (999.6,1250.2)（`p140/p141/p142/p143`）。注入器 9,512 B md5 `e9f6c113…`，pid 15360（父桥 25618）。
+> **踩的坑**：`B: PROP=2` 是位图（bit 1 = DIRECT），第一版 `& 1` 恒 0 ⇒ 静默退回 uinput、多出一个设备；改成 `& (1 << INPUT_PROP_DIRECT)` 才对（probe 135→137→139→140）。
+> **没做什么**：APK 没动（0.27）、桥/cordis 没动；写真设备依赖 root 与这台机的 evdev write 行为（换机先跑 probe 133/134）；**未提交**。全文 **RUNBOOK 14.50**。
+> 上一格是**状态 50**（他选了"换动作层 + 人性化（推荐）"，不要 LSPosed。北京 11-08 10:1x–11:0x，手机在场）：
 > **动作层换掉了**：新增 `scripts/dsh-uinput.py`（6,621 B，md5 `9567cbd8…`）用 `/dev/uinput` 造虚拟触摸屏（名字 `touchpanel`），事件走 evdev → InputReader；人性化写在注入器里（落点 ±1px、随机按下/按住时长、滑动 ease-in-out）。壳新增 `Uinput.java`，`tap/tap_xy/scroll/type 的聚焦` 优先走它，**注入器不在就自动退回无障碍手势**。桥启动时拉起注入器（挂了 3 秒重起），`deploy-phone-control.sh` 一起推。**服务标签改成「屏幕辅助」**。
 > **方向踩过一次坑**：App 连 root 的 socket 被 SELinux 拒（`avc denied connectto untrusted_app→su`）⇒ 反过来：壳起 `@dsh-inject` 服务端，注入器连壳。
 > **读数**：raw 8192/16384/24576 → 360/720/1080（X）、792/1584/2376（Y）线性；竖屏 tap(1000,1250) 落 998.9,1249.4；注入器在 `deviceId=16`、被 kill 后 `deviceId=-1` 且操作仍成功（退回无障碍）、3 秒后重起 `deviceId=18`（`p127a/b/c`）；`scroll` 让 Settings 项数 32→33。引擎 8423→25088、桥 25618、注入器 25629（父 25618）。

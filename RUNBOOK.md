@@ -2267,3 +2267,69 @@ Release 那一发不是提交，读回写在六（body **522 字符**、`README.
 - **没写 LSPosed 模块**（他选的不是那条）、**没碰银行/支付类 App**、**没重启自启/没改 cordis**。
 
 **提交**：子仓 **`7e985bc`**（完整 `7e985bccebed5ac605d193a58ff37028f1501058`，31 件 1317/63）已上 `origin/main` —— 一次性 SSH URL 回声 `84a482f..7e985bc`，fetch 后 `rev-list --count` HEAD 与 origin/main **都是 31**、`origin/main..HEAD` = 0；父仓 **`68d405b2`**（完整 `68d405b2ec70a4dd923e1b3aedd670847cac20a4`，该仓无 remote）。回填这一发自己的号不写。
+
+### 14.50 继续：把注入从"自建 uinput 虚拟屏"换成"写真触摸设备"，设备表里那个多出来的 `touchpanel` 也没了（2026-11-08，北京 10:4x–11:0x，手机在场）
+
+**为什么**：14.49 的对照发现 `evdev` 的 write 在这台机上（不 grab）就能把事件送进系统，而且走的是 **真触摸设备 event8 → deviceId=4**。既然如此，就没必要再建一个虚拟屏——那会多出一个同名设备，是 App 用 `InputManager.getInputDeviceIds()` 能枚举到的残余指纹。
+
+**做法**（`scripts/dsh-uinput.py`，9,512 B，md5 `e9f6c113…`）
+- 启动先找真设备：解析 `/proc/bus/input/devices`，选 `B: PROP` 里 **DIRECT 位** 置位、`P: Phys` 非空（虚拟设备的 Phys 是空的）、`H: Handlers` 里带 `eventN` 的；名字含 `touch` 的优先。
+- 打开 `/dev/input/eventN`（O_WRONLY），用 **`EVIOCGABS`** 读 X/Y 的 min/max（这台机 X 0..23040、Y 0..50688），把归一化坐标按这个范围换成 raw。
+- 发 MT-B 序列（slot / tracking id / position / touch major / pressure / BTN_TOUCH / SYN），人性化照旧（抖动、按下/按住随机、滑动 ease-in-out）。
+- 找不到/打不开才退回自建 uinput 虚拟屏（14.49 那套原样保留，`ping` 回 `real:true/false`）。
+
+**踩的坑（值得记）**：第一版 `find_real_touch()` 写成 `if not (int(prop,16) & INPUT_PROP_DIRECT): continue` —— `B: PROP=2` 是**位图**（bit 1 = `INPUT_PROP_DIRECT`），不是"值等于 1"；`& 1` 恒为 0 ⇒ 一个真设备都选不出来，**静默退回了 uinput**，表面看"还能用"，实际多出一个设备。靠 probe 135（自测模式的 stderr 只打 `fallback`）→ 137（`picked=None`）→ 139（把块原样打出来）才定位。改成 `& (1 << INPUT_PROP_DIRECT)` 后 probe 140 打出 `picked=/dev/input/event8`、`X (0, 23040) Y (0, 50688)`。
+
+**读数**
+- 重起后注入器 pid **15360**（父 25618，还是桥），`dumpsys input` 里 `touchpanel` **只剩 Device 4**（两节各一行，共两行/一个设备），虚拟设备没了。
+- `tap_xy(1000,1250)`（横屏下）→ `deviceId=4`、自然坐标 (190.5,999.9)（与 `_norm()` 的 90° 公式一致）；`TAP ok=true`（`p141`）。竖屏复测（`user-rotation lock 0`）→ `deviceId=4` at **999.6,1250.2**（`p143`）。
+- 滑动：`scroll down` 产生一串 `deviceId=4` 的 MOVE 到 UP（`p142`），说明多步写也在走真设备。
+- 老的 uinput 回退路径这轮**没再跑**（14.49 实测过：kill 注入器 → 退回无障碍，3 秒重起）。
+
+**没做什么**：APK 没动（仍 0.27）；桥/cordis 没动；**未提交**。写真设备这条路**依赖 root** 且**依赖这台机的 evdev write 行为**——换别的机/别的 ROM 要先按 probe 133/134 复点；写不进时自动退回 uinput（再不行退回无障碍），不会整条断掉。
+
+### 14.51 提示条换成"小鲸鱼 + 按动作换词"，并加一条可回查的动作日志（2026-11-08 11:0x，手机在场）
+
+**为什么**：他两句 —— ①"AI 正在操控你的手机"要在整轮操控里看得见（模型思考时灯灭，让他以为挂了）；②要人性化：换成"小鲸鱼"，并按动作说清此刻在干什么（看屏幕 / 打字 / 发消息……）。顺带把上一轮提的"那一下为什么点进表情包"做成可查的日志。
+
+**做法**（`app/src/com/zhl/dsh/TreeService.java`，壳 0.28）
+- `BADGE_HOLD_MS` 8000 → **60000**；`screen` 也刷新提示（原来只有动作才刷）。
+- `showBadge()` 改成 `showBadge(String)`，dispatch 里按命令给词：screen 看屏幕 / tap 点一下（控件文字含"发送"时报"发消息"）/ tap_xy 点一下 / type 打字 / scroll 翻页 / key 四种（返回、桌面、最近任务、通知栏）/ open「名字」/ handoff"想请你定一下" / 兜底"操控你的手机"。
+- `logAction()`：环形 300 行写 `getFilesDir()/actions.log`（UTF-8；每写一次重写全文件，文件很小）。落点：screen 包名 + 项数 + 截断标记；tap 编号 / 角色 / 文字前 24 字 / 控件中心 / 实际做法；type 编号 / 字数 / set / 回读长度（**文字内容不记**）；scroll id + 方向；key 键名 + 返回值；open 请求名 → 解析名。`screenText()` 每次返回都会落一行 ⇒ 动作前后各有一条指纹。
+
+**读数**
+- `bash app/build.sh`（在 `app/` 里跑）：javac 30 个 class，**成品 176,812 B sha256 `1a03b0d1ea8a7d5d4a3d3c68cb4278aa1cb1899802f9ceecde648c671a29e058`**。
+- 装机（`tools/install-apk.sh`）：本地 / 推送 / 机上 base.apk 三个 sha256 撞上，`versionName=0.28`。
+- 探针 144（`downloads/p144.txt`，只发一条 `screen`）：`ok=true ms=44 bytes=638`、`屏幕 · com.tencent.mm · 共 35 项`。
+- 截图 **`downloads/badge028.png`**：微信聊天页顶部一条 `🐳 小鲸鱼正在看屏幕`（鲸鱼 emoji 由系统字体渲染、不是图片），60s 窗口内截到。
+- 日志：`/data/data/com.zhl.dsh/files/actions.log` = 46 B，内容 `11-08 11:03:25 screen com.tencent.mm items=35`（与探针读到的 35 项对上）。
+- 装完 **FGS 没自动起**：`dumpsys activity services com.zhl.dsh` 只有 `TreeService` ⇒ `am start -n com.zhl.dsh/.MainActivity` 后出现 `PhoneKeepAlive isForeground=true types=0x40000000`；随即 `am start -n com.tencent.mm/.ui.LauncherUI`，`ResumedActivity` 回到 `ChattingUI`，把他原来的聊天页还回去。
+
+**没做什么**：桥 / cordis / 注入器没动；`tap` 的日志行这轮**没在真机触发**（微信正聊着，只读了 screen，没去点）；提示条位置没动（仍在 40dp，会压在 App 标题栏上 —— 他这次没提位置）；**未提交**。
+
+### 14.52 桥 / cordis / 注入器三件当场对账 + 端到端一发（2026-11-08 11:1x，手机在场）
+
+**为什么**：壳 0.28 装完，他一句"桥、cordis、注入器都做完，然后提交"——把引擎侧三件推到与仓库一致并各拿一条读数，再提交。
+
+**对账（只读，`sh tools/deploy-phone-control.sh --check`）**
+```
+仓库桥  14424 B  md5 5b92b309051ef3724fa9ae3959486946
+机上桥  14424 B  md5 5b92b309051ef3724fa9ae3959486946   [ok] 逐字节相同
+仓库注入器 9512 B md5 e9f6c11322ae21a61c46b6ac604c840d
+机上注入器 9512 B md5 e9f6c11322ae21a61c46b6ac604c840d   [ok] 逐字节相同
+cordis.patch.yml 里 phone-mcp 命中：2
+--dump-config：phone_mcp_hits 1 / bridge_hits 1   （组合树里真接上了）
+```
+桥自测（PC 侧）：`node scripts/dsh-phone-bridge.js --selftest` → **合计 19 条：PASS 19 / FAIL 0**。
+
+**端到端一发**（探针 145，`downloads/p145.txt`）：`tap_xy(2693,782)`（横屏 DSH 聊天页空白处）→ `ok=true ms=436`，回读 `屏幕 · com.zhl.dsh · 共 87 项`。`dumpsys input` 里最新一发 `deviceId=4`、自然坐标 **(658.4, 2692.1)**，与 `_norm()` 对 (2693,782) 的期望 (658,2693) 对上 ⇒ **壳重装后注入器自动重连 `@dsh-inject`，走的是真触摸设备，没退回无障碍**（进程：引擎 25088 / 桥 25618 / 注入器 15360）。
+
+**意外收获：他说的"点进表情包"这次被日志拍下来了**（0.28 的动作日志第一批真实数据）
+```
+11-08 11:10:30 screen com.tencent.mm items=69
+11-08 11:10:32 tap id=18 图片 "" center=1239,1532 via=已点击（触摸）
+11-08 11:10:33 screen com.tencent.mm items=131
+```
+⇒ 点的是**一个没有文字标签的 `图片` 节点（就是表情按钮）**，一项从 69 涨到 131（表情面板）。**不是识图、不是脚本回放**：模型只能在"编号 + 角色 + 空标签"里靠位置猜；猜错后它自己重读、返回、再进。这正是"图标按钮没有 contentDescription ⇒ 树里只剩 `图片` 两个字"的形状（`labelOf` 取 text → contentDescription → hint，全空就只打印角色）。
+
+**没做什么**：没给无标签图标按钮补"相邻文字"提示（下一步候选，未做）；cordis 一行没动（`--dump-config` 命中即可，不重启）；没重启引擎。

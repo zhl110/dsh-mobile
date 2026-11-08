@@ -19,8 +19,8 @@ KS_PASS="${DSH_KS_PASS:-}"
 if [ -z "$KS_PASS" ] && [ -f local/ks-pass ]; then KS_PASS=$(cat local/ks-pass); fi
 PKG=com.zhl.dsh
 MIN_API=26
-VER_CODE=27
-VER_NAME=0.27
+VER_CODE=28
+VER_NAME=0.28
 
 cd "$(dirname "$0")"
 # Git-Bash 会把 /data/local/tmp/x 这种参数改写成 D:/program files/Git/data/local/tmp/x 再交给 adb

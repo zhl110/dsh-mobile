@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.zhl.dsh"
-    android:versionCode="27"
-    android:versionName="0.27">
+    android:versionCode="28"
+    android:versionName="0.28">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- 0.6 起多了两条：语音输入插件在页面里调 getUserMedia({audio:true})，WebView 那边要先把
