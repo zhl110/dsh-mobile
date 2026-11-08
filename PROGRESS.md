@@ -1,7 +1,21 @@
 # dsh-mobile — 项目目标与进度
 
 > **接班先读这一段（2026-10-21 深夜改写，给冷启动的人）**
-> **最新一格是状态 43**（他两句："Readme 文件还有 Release 都要一起" ＋ "注意不要在里面提交我本地的一些私密的信息"。北京 11-03 22:1x–22:4x，手机在场但一个字节没动）：
+> **最新一格是状态 45**（他连说四遍："你一步做到位，做到位之后，然后我在手机上试一下。"＋"继续"。北京 11-08 08:2x–09:0x，手机在场、无障碍开关他自己开的）：
+> **做成了，完整控制环**：壳 **0.13**（versionCode 13）把 0.11 的只读扩成 **screen/tap/tap_xy/type/scroll/key** 六件（`TreeService.java` 520 行：三段式点击 = 本控件 ACTION_CLICK → ≤4 层可点父控件 → 坐标手势；EventClock 等稳 = 首事件 ≤1.5s + 静默 300ms、硬封顶 3s；手势走 HandlerThread + CountDownLatch；编号→节点缓存，动作后回新屏；密码框只标不填不渲染）。JSON 行协议（`{"cmd":…}`→`{"ok":…,"screen":…}`），兼容裸 `ping`/`screen`；`tree_service.xml` 补 `canPerformGestures="true"`（缺了 dispatchGesture 全回 false）。
+> **引擎侧接线**：壳没有 server SDK（探针 92）⇒ 手写零依赖 MCP stdio 桥 `scripts/dsh-phone-bridge.js`（11,488 B，`--selftest` 本机 **16/16 PASS**），工具名 `mcp__phone__*`。接线 = `config/cordis-phone-mcp.snippet.yml`（`- insert:` 一个 `@deepseek-ai/dsh-mcp-client` 实例，serverName=phone，stdio 起桥），`tools/deploy-phone-control.sh` 推桥 + 备份 cordis（sha256 撞上才写）+ 追加，`--dump-config` **phone_mcp=1 / bridge=1**（不重启判据，铁律 14）。
+> **端到端硬证**：最小重启引擎（13269→21616，入口 9685 自己拉新一代），新引擎 spawn 的桥 **pid 22254 父进程正是 21616** ⇒ mcp-client(phone) 已加载、工具已注册。探针 94（`downloads/p94i.txt`）：shell JSON ping/screen/key_home 全 ok、bad-id 回正确错；桥 MCP 6 工具；桥 `tools/call` screen+key home → `isError=false` + 新屏。链 = MCP → 桥 → abstract socket → 壳 → 动作 → 新屏。
+> **本轮最大的一条坑：OOS 的 cached-app 冻结**（`downloads/p94e/f/g/h.txt`）。重装后进程被冻，thread wchan = **`do_freezer_trap`**，abstract socket 还在听但没人 accept ⇒ connect 成功、写出去、**没数据也不关**（看着像"服务没应答"，其实是被冻）。**doze 白名单 + standby active 都挡不住**（25s 后台仍冻）。修法：0.13 加前台保活 `PhoneKeepAlive.java`（`MainActivity.onCreate` 起，`foregroundServiceType=specialUse`，不请求 POST_NOTIFICATIONS）⇒ 进程停在 FGS 档（oom_adj → **50**），后台 25s 后 ping 仍 `pong`。教训：判"服务 socket 不应答"先看进程 thread 的 wchan 是不是 `do_freezer_trap`。
+> **顺手修的两处**：`app/build.sh` 的 javac 闸只查 `MainActivity.class` ⇒ 0.12 第一发 TreeService 用了不存在的 `ACTION_SCROLL_LEFT/RIGHT` 编失败、MainActivity 却编过、**差点签出没有 TreeService 的废 APK**；现在闸要两个 class 都在（scroll 的 left/right 改成只走滑动，节点只有 FORWARD/BACKWARD）。`deploy-phone-control.sh` 的 chroot 命令禁单引号/`$()`（四层引号会塌）。
+> **APK**：0.13 = **168,620 B** sha256 **`3d4d19d1808adf1bd58a82c594e957eab0c3ef276537df2102b27a814d3206f3`**（root-cp 装机 `Success/pm_rc=0`，机上 base.apk 与它逐字节撞、`versionName=0.13`）。
+> **我这轮没做什么**：**没在真机上点过 tap/type/scroll**（手势层只验了 key home + screen，tap 走同一条手势管道、映射单测在本机 `--selftest`）；**没触发引擎自己那次 tool call**（证了"引擎 spawn 了桥、桥↔壳通"，模型→工具那一跳要他在聊天里试）；**未提交**（铁律 9）；没碰他的 `/data/local/tmp`、cordis 只 append 了 phone-mcp、purge、自启；没 reboot。全文 **RUNBOOK 14.44**。
+> 上一格是**状态 44**（他一句："我等会儿把手机接上，你就说你能不能做。就是说，做这个控件树这个东西。"＋"好了，手机已经连接上了"＋"开了"。北京 11-08 07:4x–08:0x，手机在场、无障碍开关他自己开的）：
+> **做成了，只读那一步**：壳 **0.11**（versionCode 11）新增 `app/src/com/zhl/dsh/TreeService.java`（AccessibilityService，229 行）——abstract socket `dsh-mobile-tree` 上两条命令：`ping`→`pong`、`screen`→带编号的控件树（上限 2000 节点 / 80 层 / 300 行 / 每标签 60 字符；密码框内容永不渲染；**performAction / dispatchGesture 调用点为零**，grep 命中 1 是文件头自述注释）。chroot 与宿主共用 netns ⇒ 引擎侧 Node 直连这个 socket（DSH Go PhoneBridge 同形状；他明说不二创 ⇒ 只参照形状、代码自写，对方 AGPL）。
+> **端到端读数**（`downloads/p90-2.txt`）：`PING_REPLY="pong" / ping_rc=0`，`BYTES=1883 / HEAD=屏幕 · com.android.launcher · 共 38 项 / ITEM_LINES=38 / screen_rc=0`。装机走 root-cp 路 `Success / pm_rc=0`、机上 `versionName=0.11`；APK **164,524 B**，现役那发 sha256 **`bc70ac388154cda2495f781ad393d8c37cc75bcdaf059090ef4b023e5bddab23`**（第一发 `3b3c2ce8…` 被 uid 修复那发替掉）。开关他亲手开的，重装后仍在（名单 `grep_rc=0`、计数 1）。
+> **本轮最大的一条坑**：第一版 socket 只放行 App 自身 uid ⇒ chroot 的 Node 是 **root（uid 0）**，connect 成功、一写就 **EPIPE**（`p90.txt`，证据留着没覆盖）；DSH Go 引擎在 proot 里与壳同 uid 所以没这条坑，我们是真 chroot ⇒ 放行 uid 0，重建重装后全绿。
+> **交叉对账**：系统 `uiautomator dump` = **27 节点、全 `com.android.launcher`**；我们 **38 项** —— **口径差不是失败**（我们留跨窗口的文本/可交互节点，含文件夹第二页的屏外坐标与 hotseat 的零宽坐标）；两边都认前台包是 launcher。屏外/零宽坐标给下一步"点"提了个醒：要取可见区域内的点，不能裸用中心。
+> **我这轮没做什么**：**没有点击/输入/手势**（下一步，他点头才做）；引擎与入口没起停（开工复点 pid 9685 / 13269 全程未动）；他的东西一个没碰、没 reboot；开关不是我拨的；DSH Go 代码一行没抄；引擎侧还没接 MCP 工具（socket 现在只有探针在用）；没在别的 App 页面验过树（只验了桌面这一屏）；**未提交**（铁律 9）——代码六件＋文档三份已暂存（**9 件 361/5**），隐私闸门 `--staged` **合计命中 = 0**（名单 5 条全干净），等他一句话就提交。全文 **RUNBOOK 14.43**。
+> 上一格是**状态 43**（他两句："Readme 文件还有 Release 都要一起" ＋ "注意不要在里面提交我本地的一些私密的信息"。北京 11-03 22:1x–22:4x，手机在场但一个字节没动）：
 > **这仓之前没有 README**（GitHub 首页是空的，而"即装即用"的门面就在首页）⇒ 建了 [README.md](README.md)：三层结构、要什么机器、`gh release download` + `bash tools/install-from-scratch.sh` 的装法、包里有/明确没有、怎么重造包、提交前那道隐私闸门、目录表。**体积与 sha 没抄第二份**（指回随包的 `payload-meta.txt`）。Release 说明同步改了并**读回**：body **522 字符**、里面 `README.md` 命中 **1**，三件资产名字与字节照旧（**没重新上传、没换 sha**）。
 > **隐私普查**（口径 `git grep -I -c` 数跟踪区，遮之前）：序列号 3 件 7 处、本机用户名 8 件 10 处（其中 **6 处是写死的 adb 默认路径**）、Windows 家目录 7 处、提交邮箱 6 处、**签名库口令的默认值 1 处**；`github_pat_` 那 2 处 `len=11` 是 RUNBOOK 里的**词**、`sk-{20,}` 那 1 处是闸门自测埋的假串 ⇒ **没有真令牌、没有真 API key、没有私钥**。`ghp_`/`AKIA`/`PRIVATE KEY` 全 0。
 > **全历史也扫了**（`git log --all -p` = 2,718,119 B）：序列号 8 行涉 5 发、用户名 12 行涉 6 发、邮箱 36 行涉 4 发（**大头是每发的 Author/Commit 元数据**）、口令默认值 3 行涉 1 发 ⇒ **这些在已公开的历史里仍看得见**；要收回只能改写历史 + 强推或删库重建，**本轮一条历史没动**（那是他的决定，不是我的）。
@@ -1374,6 +1388,7 @@ npm 侧一条要看清：**包名不是 `dsh-market` 而是 `dshmarket`**（npmm
     并且立了 `tools/check-private.sh` 让下一轮起不再新增 —— 但**历史改不了自己**：`git log --all -p` 复点是序列号 8 行涉 5 发、用户名 12 行涉 6 发、邮箱 36 行涉 4 发（大头是每发提交的 Author/Commit 元数据）、口令默认值 3 行涉 1 发。
     要真收回只有两条：**改写历史 + 强推**（所有提交号作废，父仓与那枚 `payload-20261103-132346Z` tag 的指向都要重对）或**删库重建**（Release 三件资产要重挂）。两条都是不可逆动作，**我没做，也不该顺手做**。
     只补一句读数：那把签名库的私钥**没入库**（`app/local/` 已 gitignore，库里只有口令默认值），所以这四项里真正"能被人拿去用"的一条都没有 —— 剩下的都是**可识别**，不是**可利用**。全文 RUNBOOK 14.42 二/七。
+44. **控件树"只读"这一步做完了，下一步"点/输/手势"与"引擎接线"都等他点头**（状态 44，RUNBOOK 14.43）：壳 0.11 的 `TreeService` 已在机上验通（ping→pong、38 项树、开关他自己开的、重装后开关没掉）。**接下来两格我不自己动手**：① 要不要做操控（tap/type/scroll/key —— DSH Go 那套三层点击＋settle 等待的形状已调研清楚，证据在忽略区 `downloads/dsh-go-*`；屏外/零宽坐标那条提醒写在 14.43 五）；② 引擎侧要不要接成 MCP 工具（现在 socket 只有探针客户端，引擎还"用不上"这棵树）。另：**代码六件＋文档三份已暂存未提交**（铁律 9），他一句"提交"就走，提交前隐私闸门读数回填在 RUNBOOK 14.43 七。
 
 
 ## 遗留问题

@@ -1,0 +1,25 @@
+# dsh-mobile 手机控制接线（壳 0.12）—— 由 tools/deploy-phone-control.sh 追加到 web profile 的
+# cordis.patch.yml 末尾（那是个顶层 YAML 数组）。本文件整段追加即可，注释无害。
+#
+# 形状来源（不是猜的）：
+#   · `- insert:` 插新插件实例 = DSH Go 的 dsh-go-bridge 层同款（downloads/dsh-go-cordis.patch.yml:3）。
+#   · 引擎内置 @deepseek-ai/dsh-mcp-client（探针 91/93 量的：loader 名 mcp-client，inject ["tools"]，
+#     Config 的 stdio 分支吃 transport/serverName/command/args/env/cwd/toolCallTimeoutMs）。
+#   · serverName=phone ⇒ 工具注册成 mcp__phone__<name>（screen/tap/tap_xy/type/scroll/key）。
+#   · command/args 指向零依赖桥 scripts/dsh-phone-bridge.js（机上 /usr/local/bin/dsh-phone-bridge.js）。
+#     桥只在 tools/call 那一刻才连壳的 abstract socket（'\0dsh-mobile-tree'），启动握手不依赖无障碍开关，
+#     所以 failOnStartupError 用默认 false 即可：开关没开时工具仍在，调用才回「连不上壳服务」。
+#
+# 验接对没接对（不用重启、不用他在场）：
+#   dsh --profile web --dump-config 里 phone-mcp 与 dsh-phone-bridge 命中应各 ≥1；
+#   命中 0 ＝ 插错了形状被静默丢掉（铁律 14），别去重启引擎。
+# 生效：重启引擎一次（只 SIGTERM `dsh web`，入口自己拉新一代；判据照 scripts/dsh-engine-restart-and-verify44.sh）。
+# 撤法：tools/deploy-phone-control.sh --revert /root/.dsh/cordis.patch.yml.bak.<UTC时间戳>（逐字节还原）。
+- insert:
+    - id: phone-mcp
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: stdio
+        serverName: phone
+        command: /usr/local/bin/node
+        args: ['/usr/local/bin/dsh-phone-bridge.js']

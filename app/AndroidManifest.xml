@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.zhl.dsh"
-    android:versionCode="10"
-    android:versionName="0.10">
+    android:versionCode="13"
+    android:versionName="0.13">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- 0.6 起多了两条：语音输入插件在页面里调 getUserMedia({audio:true})，WebView 那边要先把
@@ -16,6 +16,11 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <!-- 0.13：前台保活服务（PhoneKeepAlive）。只为把进程钉在 FOREGROUND_SERVICE 档、躲开 OOS
+         的 cached-app 冻结（否则后台几十秒后无障碍服务被冻，引擎调工具就超时）。
+         specialUse 是 Android 14+ 的声明类型，sideload 不需要 Play 的那套理由。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application
         android:allowBackup="false"
@@ -51,5 +56,34 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 0.11 起：控件树服务（0.11 只读，0.12 扩到可操控）。服务正文在 TreeService.java：
+             读当前屏幕的无障碍控件树，经 abstract unix socket（dsh-mobile-tree）递给本机引擎；
+             0.12 起还能按引擎指令做点击/输入/滚动/按键（手势要 canPerformGestures，见 tree_service.xml）。
+             开关在系统「无障碍」里，由用户亲手开；关掉开关即停一切操作。
+             侧载包要先在应用信息里「允许受限制的设置」。 -->
+        <service
+            android:name=".TreeService"
+            android:exported="false"
+            android:label="@string/tree_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/tree_service" />
+        </service>
+
+        <!-- 0.13：前台保活。MainActivity.onCreate 起它，把进程钉在 FOREGROUND_SERVICE 档（非 cached），
+             躲开 OOS 的 cached-app 冻结 —— 否则 App 退后台几十秒后无障碍服务被冻、abstract socket 只排队不应答。 -->
+        <service
+            android:name=".PhoneKeepAlive"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="hold the accessibility phone-control bridge process alive while backgrounded" />
+        </service>
     </application>
 </manifest>

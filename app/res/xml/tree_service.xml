@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 壳 0.12 手机控制服务的无障碍配置。
+     canRetrieveWindowContent：读控件树（screen）。
+     canPerformGestures：dispatchGesture 的硬前提（API 24+），缺了 tap/tap_xy/scroll 的手势兜底全回 false。
+     accessibilityFlags reportViewIds 供排查；事件订窗口状态/内容两种，供 settle() 的事件时钟判稳。 -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagReportViewIds"
+    android:canRetrieveWindowContent="true"
+    android:canPerformGestures="true"
+    android:description="@string/tree_service_desc"
+    android:notificationTimeout="100" />

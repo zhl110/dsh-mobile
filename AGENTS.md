@@ -412,6 +412,10 @@ runner = `/data/local/sh/dsh-chroot.sh`。**这两个路径不能混**（见铁�
   正确写法 `(.assets|length|tostring)`。⇒ 这类复点**用 canary 资产验**（建一发 9 B 的、读回名字/字节/digest、当场删），别拿"没报错"当通过（铁律 3）。
   ② **`--notes "…\` + 换行` 的续行会把反斜杠留在值里**（同一条老坑的第 3 次出现，前两次在普查条目里冒出 `[状态 ] \`）⇒ 多行说明一律写成 `NOTES="${NOTES}…"` 分段拼。
   同族第 ③ 条：`gh … | sed` 之后取 `$?` 拿到的是**管道尾码**，不是 `gh` 的 ⇒ 一律 `X=$(…); RC=$?` 再打印。
+- **abstract socket 的 peer 认证别只认"自己的 uid"**（11-08，壳 0.11 首验）：`LocalServerSocket` 用 `getPeerCredentials().getUid()` 只放行 App 自身 uid ⇒ chroot 里的 Node 以 **root（uid 0）** 来连，**connect 成功、一写就 EPIPE**。DSH Go 没这条坑是因为它引擎在 proot 里与壳**同 uid**；我们是真 chroot、引擎是 root ⇒ 放行 uid 0（真闸门＝他亲手开的无障碍开关 + 只读协议 + `exported=false`）。读数 `downloads/p90.txt`（EPIPE / ping_rc=4）→ `p90-2.txt`（pong / 38 项），做法 RUNBOOK 14.43 四。
+
+- **App 退后台几十秒后无障碍服务"不应答"，先查是不是被 OOS 冻住了**（11-08，壳 0.13 实测量到的）：症状 = abstract socket 还在听（`/proc/net/unix` 里 `@dsh-mobile-tree` 在）但 `connect` 成功、写出去、**没数据也不关**（ping 超时）——**看着像 socket / 协议坏了，其实整个进程被 cached-app 冻结**（`dsh-tree-server` 线程 wchan = **`do_freezer_trap`**）。`adb shell am start -n com.zhl.dsh/.MainActivity` 唤到前台即解（wchan 变 `__skb_wait_for_more_packets`、ping 回 `pong`）；但 **doze 白名单 + `am set-standby-bucket active` 都挡不住**（后台 25s 又冻）。修法 = **前台服务保活** `PhoneKeepAlive`（`foregroundServiceType=specialUse`，`MainActivity.onCreate` 里起，不请求 POST_NOTIFICATIONS）⇒ oom_adj 落到 FGS 档、后台 25s 后仍应。判据：`cat /proc/<壳pid>/task/*/comm` 找 `dsh-tree-server`、再看它 wchan。读数 `downloads/p94e/f/g.txt`（冻）→ `p94h.txt`（FGS 后仍 pong），做法 RUNBOOK 14.44 四。
+- **加无障碍手势要 `canPerformGestures`；而 `build.sh` 的 javac 闸只该放行"真编过"的类**（11-08，壳 0.12）：`dispatchGesture` 的硬前提是 `res/xml/tree_service.xml` 里 `canPerformGestures="true"`——缺了它**不报错、任何配置读数都是绿的**，只有真点时全回 false。另一条：`app/build.sh` 的 javac 输出被 `grep … || true` 咽了，真正的闸只查 `MainActivity.class` ⇒ 我给 TreeService 用了不存在的常量（`ACTION_SCROLL_LEFT`，节点只有 FORWARD/BACKWARD）编失败、MainActivity 却编过，**差点签出没有 TreeService 的废 APK**。现在闸要 `MainActivity.class` **和** `TreeService.class` 都在；**往 `src/` 加新类时把它的 class 也算进闸**。
 
 ## 不在这里写的东西
 

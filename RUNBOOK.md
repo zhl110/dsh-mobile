@@ -2087,3 +2087,66 @@ README 在 GitHub 上的**落字节判据**：`raw.githubusercontent.com` 这一
 父仓 `D:/mycode` 同内容本地提交 **`23fbbead`**（pathspec 带 `dsh-mobile/` 前缀；那仓仍无 remote ⇒ 只落本地），父仓范围内这四个形状也复点为 **0**。
 Release 那一发不是提交，读回写在六（body **522 字符**、`README.md` 命中 **1**、三件资产名字与字节未变）。
 
+### 14.43 他一句"做这个控件树这个东西"：壳 0.11 真读回了一棵带编号的树（只读里程碑；ping→pong、38 项、1,883 B；开关他自己开的）（2026-11-08，北京 07:4x–08:0x，手机在场）
+
+**一、范围先钉死**：他原话"我等会儿把手机接上，你就说你能不能做。就是说，做这个控件树这个东西。"我答能，并把这一步的范围说给他：**只读**——读屏幕控件树，**不含点击/输入/手势**（那是下一步，他点头才做）；无障碍开关**他亲手开**（我只开设置页）；壳 0.10→0.11。前置的两问（DSH Go 是什么/为什么操控那么丝滑）本轮 earlier 已答完，证据在忽略区 `downloads/dsh-go-*`（readme 21,979 B、tree.json 5,962 条、Actuator/EventClock/TreeCapture/ScreenFormat/PhoneBridge 等源码件）；他明说**不二创**（对方 AGPL-3.0）⇒ 只参照形状（编号树、abstract socket、节点上限），代码自写。
+
+**二、建了什么（六件，全在壳与探针，引擎/入口一行没动）**
+- `app/src/com/zhl/dsh/TreeService.java`（新，**229 行**）：AccessibilityService；`LocalServerSocket("dsh-mobile-tree")`（abstract 命名空间）；协议＝一行请求 → 正文 + `\n\n`（连接可续发，soTimeout 10 s）：`ping`→`pong`、`screen`→编号树、其它→ERR。上限 **2000 节点 / 80 层 / 300 行 / 每标签 60 字符**（DSH Go TreeCapture 的同量级）；只收"可交互或有文字"的节点，角色映射中文（按钮/输入框/列表/文本…），label 取 text→contentDescription→hint，**密码框只标「密码框」、内容一律不渲染**，坐标 `@(l,t-r,b)`，API<33 手动 recycle。**`performAction`/`dispatchGesture` 调用点为零**（`grep -c` 命中 **1**＝文件头第 34 行那句自述注释，不是调用）。
+- `app/AndroidManifest.xml`：versionCode **10→11** / versionName **0.10→0.11**；service `exported=false` + `BIND_ACCESSIBILITY_SERVICE` 权限。
+- `app/res/xml/tree_service.xml`（新）：`canRetrieveWindowContent=true` + `flagReportViewIds`，事件只订 `typeWindowStateChanged|typeWindowContentChanged` 两种，**按需现读树、不攒事件**。
+- `app/res/values/strings.xml`：两条字符串，描述明写"只读取屏幕内容，不执行任何点击、输入或手势"。
+- `app/build.sh`：`VER_CODE=11` / `VER_NAME=0.11`。
+- `scripts/dsh-tree-first-probe90.sh`（新，纯只读探针）：三条判据——服务在无障碍名单里 / chroot 的 Node 连得上 abstract socket（ping→pong）/ screen 回一棵头行计数与编号行数同源的树。`bash -n` 过。**编号本欲 89，因 `downloads/p89.txt` 已被 11-02 那发体积探针占用 ⇒ 改名 90**（"落盘前查同名"那条老坑这次提前躲掉）。
+- **为什么 abstract socket 这条路通**：chroot 与宿主共用网络命名空间（`dsh-chroot.sh` 只 unshare `-m`、不 unshare net），abstract socket 按 netns 归属 ⇒ chroot 里的 Node `net.connect('\0dsh-mobile-tree')` 直达。**判据是 pong 真回来了**（三），不是从脚本推断。DSH Go 的 PhoneBridge 同形状（它是 MCP JSON-RPC，我们这一步只是两条命令的文本协议）。
+
+**三、装机与端到端读数**（每条可重跑）
+- APK 两发都是 **164,524 B**：第一发 sha256 `3b3c2ce83c7b9c186d76a1bc9eab412c4126c2e16392ee994aaaa89ef6de3ad8`；uid 修复后那发 **`bc70ac388154cda2495f781ad393d8c37cc75bcdaf059090ef4b023e5bddab23`**（现在盘上与机上这一发）。同尺寸不同 sha ⇒ 只认 sha 认"哪一次打包"（老规矩）。
+- 装机走已验的 root-cp 路（push → `cp` 进 `/data` → `restorecon` → `pm install -r` → 两处删净）：回声 **`Success` / `pm_rc=0`**，机上 `versionName=0.11`。
+- 开关：他亲手在系统设置里开（Android 13+ 侧载应用先要过"允许受限制的设置"那一道，也是他自己过的；我只 `am start` 开了设置页）。`settings get secure enabled_accessibility_services` 含 `com.zhl.dsh/com.zhl.dsh.TreeService`，`grep_rc=0`；**重装之后开关仍在**（计数 **1**）。
+- 探针第一发 `downloads/p90.txt`：**`CONNECT_ERR=EPIPE` / `ping_rc=4`**（成因见四；这份证据原样留着，修复后那发另存，不覆盖）。
+- 修复后 `downloads/p90-2.txt`：**`PING_REPLY="pong"` / `ping_rc=0`**；**`BYTES=1883` / `HEAD=屏幕 · com.android.launcher · 共 38 项` / `ITEM_LINES=38` / `screen_rc=0`**（头行计数、编号行数、树原文三个数同源对上）。树原文是桌面一个文件夹里的应用与坐标（**原文在忽略区，不抄进现役件**）。
+
+**四、本轮最大的一条坑：EPIPE——socket 的 uid 闸门只认"自己人"**
+第一版服务用 `getPeerCredentials().getUid()` 认证对端，**只放行 App 自身 uid** ⇒ chroot 里的 Node 以 **root（uid 0）** 来连，被当场 close；症状是 **connect 成功、一写就 EPIPE**（p90 那发）。**DSH Go 没这条坑**：它的引擎在 proot 里与壳**同 uid**；我们的引擎在真 chroot 里以 root 跑 ⇒ 必须放行 uid 0（`TreeService.java:76-80`，头注释记了这条）。真正的闸是三层：**他亲手开的无障碍开关** + socket 只答只读请求 + `exported=false`。修复→重打→重装（开关没掉）→ p90-2 全绿。
+
+**五、独立交叉对账：38 项 vs 27 节点是口径差，不是失败**
+系统 `uiautomator dump`（只读，临时件用完当场删、删后 `ls` 复点"不在"）：**27 个 `<node>`、27 个全 `package="com.android.launcher"`**。我们的树 **38 项**：walker 收的是跨窗口的"可交互或有文字"节点，含**文件夹第二页**（[17]-[26]，x>1440 的屏外坐标）与 **hotseat**（[29]-[35]，零宽坐标）；uiautomator  dump 的是活动窗口层级，口径不同。两边在"前台包是 launcher、树非空"上一致。**顺带给下一步"点"提个醒**：屏外/零宽坐标说明将来做 tap 不能裸用 bounds 中心，要取可见区域内的点（DSH Go `Actuator.visiblePoint` 的形状）。
+
+**六、我这轮没做什么**
+**没有点击/输入/手势的任何代码**（TreeService 调用点为零，见二）；引擎与入口**没起停没重启**（开工复点读到入口 pid 9685 / 引擎 pid 13269，全程未动）；他的东西一个没碰（`/data/local/tmp` 那批、cordis、purge、自启、锁屏）；没 reboot；无障碍开关**不是我拨的**；DSH Go 代码一行没抄（他明说不二创）；**引擎侧还没接 MCP 工具**——现在这个 socket 只有探针在用，引擎还"用不上"这棵树（接线是下一步的一部分）；没在别的 App 页面验过树（只验了桌面这一屏）；没做深色/横屏/锁屏等形状测试。
+
+**七、隐私闸门与提交**
+提交前复点（当场）：`git add -- <九件>` ⇒ `bash tools/check-private.sh --staged` **合计命中 = 0**（通用形状八项全 0；本机名单 **5 条**，一条没在暂存区出现）。暂存 **9 件、361 insertions / 5 deletions**。本轮**未提交**——铁律 9：不 commit 除非他说；他一句"提交"就走子仓＋父仓两发，提交号回填在此（回填那一发自己的号不写）。
+
+### 14.44 他连说四遍"你一步做到位，做到位之后，然后我在手机上试一下"：把只读控件树扩成**完整控制环**（screen/tap/tap_xy/type/scroll/key + 等稳 + 回新屏），经手写零依赖 MCP 桥接进引擎，重启后 `mcp__phone__*` 已注册；最大一条坑 = OOS 的 cached-app 冻结（2026-11-08，北京 08:2x–09:0x，手机全程在场、无障碍开关他自己开的）
+
+**一、壳 0.12/0.13：从"读"到"读 + 操作"**
+`app/src/com/zhl/dsh/TreeService.java` 从 229 行只读扩到 **520 行**（23,069 B），socket 名与类名不变（`dsh-mobile-tree` / `TreeService`，开关重装后不掉）。协议换成**一行 JSON 请求 → 一行 JSON 响应**（`{"cmd":"screen"}` / `{"cmd":"tap","id":N,"long":b}` … → `{"ok":true,"result":…,"screen":<新树>}`；失败 `{"ok":false,"error":…}`），裸 `ping`/`screen` 文本仍兼容。六件：screen / tap / tap_xy / type / scroll / key。要点：
+- **三段式点击**（照 DSH Go Actuator 的形状）：本控件 `ACTION_CLICK` → ≤4 层可点父控件（bounds 含点击中心）→ `dispatchGesture` 坐标手势兜底。
+- **等稳 EventClock**（照 DSH Go）：见过事件且静默 300ms、或一直没事件熬过 1.5s、或硬封顶 3s；`onAccessibilityEvent` 只累加计数与时间戳。
+- 手势走独立 `HandlerThread`（`dsh-gesture`）+ `CountDownLatch` 等回调；setText 先 `ACTION_FOCUS`（不聚焦再点一下）再 `ACTION_SET_TEXT`，回读 `getText`。
+- **密码框只标不填、不渲染**；编号→节点缓存，动作后回新屏（编号只在最近一次 screen 内有效）。
+- `res/xml/tree_service.xml` 补 **`canPerformGestures="true"`** —— 缺了它 `dispatchGesture` 一律回 false（值不进配置、任何读数都是绿的，只有真点才暴露）。
+- 线程名保留 `dsh-tree-server`（排障时按名字认）。
+
+**二、引擎接线：为什么手写桥**
+探针 91/93：引擎内置 `@deepseek-ai/dsh-mcp-client`（loader 名 mcp-client，inject ["tools"]），stdio 分支 spawn 子进程、把工具注册成 `mcp__<serverName>__<rawName>`。探针 92：chroot 里只有 `@modelcontextprotocol/client@2.2.0` + `core@2.2.0`，**没有 server SDK** ⇒ 手写零依赖 MCP stdio 服务器 `scripts/dsh-phone-bridge.js`（11,488 B）：initialize（echo 客户端 protocolVersion）/ tools/list（6 工具）/ tools/call / ping；每个 `tools/call` 现连一次 abstract socket、发一行 JSON、读一行、关连接；stdout 只走协议、日志走 stderr。本机 `node dsh-phone-bridge.js --selftest` **16/16 PASS**（initialize/tools 列表/ping/未知工具 isError/未知方法 -32601/toPayload 5 例）。
+接线形状照 DSH Go（`downloads/dsh-go-cordis.patch.yml:3` 的 `- insert:`）⇒ `config/cordis-phone-mcp.snippet.yml` 插一个实例（serverName=phone，command=/usr/local/bin/node，args 指桥）。`tools/deploy-phone-control.sh` 三段式：推桥（md5 复点 755 root:root）→ 备份 cordis（sha256 撞上才写）→ 追加接线 → **`dsh --profile web --dump-config` 数命中**（不重启判据，铁律 14）。实测：cordis **1,712 B → 3,514 B**（备份 `cordis.patch.yml.bak.20261108-004029`，原 sha256 `019d806d…`），`--dump-config` **phone_mcp=1 / bridge=1**。
+
+**三、端到端硬证**
+最小重启引擎（SIGTERM 13269，入口 9685 自己拉新一代 → **21616**；杀前数身份：引擎唯一、入口非空且不同 pid、用 starttime 判换代防 pid 复用）。新引擎 spawn 的桥 **pid 22254，父进程正是 21616** ⇒ mcp-client(phone) 实例已加载、`mcp__phone__*` 已注册。探针 94（`downloads/p94i.txt`）：① shell JSON —— ping `pong` / screen 390 B `屏幕 · com.android.systemui · 共 10 项` / key home `已按 home` + 新屏 / bad-id 回正确错；② 桥 MCP —— initialize + `tools/list count=6`；③ 桥 `tools/call` screen+key home → `isError=false` + 新屏。链 = 引擎 MCP → 桥 → abstract socket → 壳 → 动作 → 新屏。
+
+**四、本轮最大的坑：OOS 的 cached-app 冻结（`do_freezer_trap`）**
+重装后第一发探针 94 **① ping 超时**（connect 成功、写出去、没数据也不关）。查进程线程：`dsh-tree-server` 在，但 wchan = **`do_freezer_trap`** —— App 主进程被 OOS 的 cached-app 冻结冻住了；abstract socket 还在听（`/proc/net/unix` 有 `@dsh-mobile-tree`），但 accept 线程被冻 ⇒ 连接只排队、无人应答（**看着像"服务没应答"，其实是被冻**）。`am start` 唤到前台即解（wchan 变 `__skb_wait_for_more_packets`，ping 回 `pong`）。但**doze 白名单 + standby bucket active 都挡不住**：后台 25s 复测又被冻（`downloads/p94e/f/g.txt`）。
+⇒ 0.13 加**前台保活** `PhoneKeepAlive.java`（`MainActivity.onCreate` 起 `startForegroundService`，`foregroundServiceType=specialUse` + `PROPERTY_SPECIAL_USE_FGS_SUBTYPE`，**不请求 POST_NOTIFICATIONS**）：进程停在 FOREGROUND_SERVICE 档（非 cached）⇒ 后台 25s 后 oom_adj=50、wchan `__skb_wait_for_more_packets`、ping 仍 `pong`（`downloads/p94h.txt`）。**以后判"服务 socket 不应答"，先看进程 thread 的 wchan 是不是 `do_freezer_trap`，别去改 socket 代码。**
+
+**五、顺手修的两处（都是"看着成功其实废"）**
+① `app/build.sh` 的 javac 闸只查 `MainActivity.class`：0.12 第一发 TreeService 用了**不存在的** `ACTION_SCROLL_LEFT/RIGHT` 编失败（`javac` 报 2 error），MainActivity 却编过 ⇒ 旧闸放行、**差点签出没有 TreeService 的废 APK**。现在闸要 `MainActivity.class` **和** `TreeService.class` 都在（scroll 的 left/right 改成只走滑动——节点只有 FORWARD/BACKWARD）。② `deploy-phone-control.sh` 里 chroot 命令**禁单引号与 `$()`**（四层引号会被宿主 shell 先求值，AGENTS.md 已知坑）。
+
+**六、我这轮没做什么**
+**没在真机上点过 tap/type/scroll**：手势那层只验了 key home（globalAction）+ screen；tap/scroll 走同一条 `dispatchGesture` 管道、参数映射在本机 `--selftest` 里单测过，但"点下去真的点到"要他在聊天里试。**没触发引擎自己那次 tool call**：证的是"引擎 spawn 了桥（父进程=21616）、桥↔壳通"，模型 → 工具那一跳只能他在 DSH 聊天里看。没提交（铁律 9）。没碰他的 `/data/local/tmp`、cordis 只 append 了 phone-mcp、purge、自启；没 reboot；没收 GET。
+
+**七、隐私闸门与提交**
+提交前 `bash tools/check-private.sh`（扫跟踪区）应仍 **合计命中 0**。本轮暂存见提交那次（不 commit 除非他说）。回填那一发自己的号不写。
+

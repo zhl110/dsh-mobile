@@ -200,6 +200,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // 0.13：起前台保活服务，把进程钉出 cached 档（OOS 会在退后台几十秒后冻结进程，
+        // 冻住后无障碍服务不再 accept，引擎调手机工具就超时）。App 此刻在前台 ⇒ Android 12+ 允许起前台服务。
+        try { startForegroundService(new Intent(this, PhoneKeepAlive.class)); } catch (Exception ignored) { }
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         try {
             File dir = getExternalFilesDir(null);

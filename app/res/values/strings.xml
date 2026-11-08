@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">DSH 工作台</string>
+    <string name="tree_service_label">DSH 手机控制</string>
+    <string name="tree_service_desc">让本机 DSH 引擎读当前屏幕的控件树，并按指令点击、输入、滚动、按键。密码框不读不填。关掉这个开关即停止一切读取与操作。</string>
 </resources>
