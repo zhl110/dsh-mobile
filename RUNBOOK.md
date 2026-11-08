@@ -2265,3 +2265,5 @@ Release 那一发不是提交，读回写在六（body **522 字符**、`README.
 - **设备枚举的残余指纹**：输入设备表里现在有**两个** `Device … touchpanel`（真机 4 / 我们的 16、18）。App 用 `InputManager.getInputDeviceIds()` 能看见多出来的一个；**下一步换 evdev 写真设备就能去掉**（见上）。
 - **只改了我们的标签**：他机上 GKD / 喵喵记账 / #一指禅 三条无障碍服务照旧在公开列表里，见无障碍就拦的 App 仍会拦（这是他的取舍，没动）。
 - **没写 LSPosed 模块**（他选的不是那条）、**没碰银行/支付类 App**、**没重启自启/没改 cordis**。
+
+**提交**：子仓 **`7e985bc`**（完整 `7e985bccebed5ac605d193a58ff37028f1501058`，31 件 1317/63）已上 `origin/main` —— 一次性 SSH URL 回声 `84a482f..7e985bc`，fetch 后 `rev-list --count` HEAD 与 origin/main **都是 31**、`origin/main..HEAD` = 0；父仓 **`68d405b2`**（完整 `68d405b2ec70a4dd923e1b3aedd670847cac20a4`，该仓无 remote）。回填这一发自己的号不写。
